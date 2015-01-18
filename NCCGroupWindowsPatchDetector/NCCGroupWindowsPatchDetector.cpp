@@ -18,6 +18,63 @@ bool bVerbose = false;
 
 _NtQueryInformationProcess __NtQueryInformationProcess = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandle(_T("ntdll.dll")), "NtQueryInformationProcess");
 
+
+//
+// Function	: AnalyzeModule
+// Role		: Analyze the particular module, find its .text section in memory and disk
+//            then compare the two.
+// Notes	: This function uses code from this 1996 article by the legend Matt Pietrek
+//            http://www.microsoft.com/msj/archive/S2058.aspx
+//
+bool IsInRelocation(VOID *dataRelocation, USHORT RelocationSize, DWORD dwOffset, PVOID pBaseAddress){
+
+
+	//
+	// OK we've read the base relocations table into our space now
+	//  - http://www.pelib.com/resources/luevel.txt
+	//  - https://github.com/Cr4sh/DrvHide-PoC/blob/master/driver/src/ldr.cpp
+	//  - http://uninformed.org/index.cgi?v=6&a=3&p=2
+	// 
+	
+	ULONG Size = 0;
+	PIMAGE_BASE_RELOCATION pRelocation = (PIMAGE_BASE_RELOCATION)dataRelocation;
+	while (RelocationSize > Size && pRelocation->SizeOfBlock)
+	{
+		ULONG Number = (pRelocation->SizeOfBlock - 8) / 2;
+		PUSHORT Rel = (PUSHORT)((PUCHAR)pRelocation + 8);
+
+		//fprintf(stdout, "[i] %p of %u\n", ((DWORD)pBaseAddress + pRelocation->VirtualAddress), pRelocation->SizeOfBlock);
+		//fprintf(stdout, "[i] %p of %u\n", pRelocation->VirtualAddress, pRelocation->SizeOfBlock);
+
+
+		for (ULONG i = 0; i < Number; i++)
+		{
+			if (Rel[i] > 0)
+			{
+				USHORT Type = (Rel[i] & 0xF000) >> 12;
+
+				DWORD Addr = (DWORD)((DWORD)pBaseAddress + pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
+				DWORD Addr2 = (DWORD)(pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
+			
+				fprintf(stdout, "[i] %p %p %p \n", Addr, Addr2, dwOffset);
+
+				//if (Type == IMAGE_REL_BASED_HIGHLOW){
+					if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 4)) {
+						return true;
+					}
+				//}
+			}
+		}
+
+		pRelocation = (PIMAGE_BASE_RELOCATION)((PUCHAR)pRelocation + pRelocation->SizeOfBlock);
+		Size += pRelocation->SizeOfBlock;
+	}
+
+
+	return false;
+}
+
+
 //
 // Function	: AnalyzeModule
 // Role		: Analyze the particular module, find its .text section in memory and disk
@@ -31,6 +88,8 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	unsigned char *pFileMemCmp = pFileMem;
 	unsigned char *pFileDisk = (unsigned char *)malloc(dwSize);
 	unsigned char *pFileDiskPtr = pFileDisk;
+	VOID *dataRelocation = NULL;
+	ULONG RelocationSize = 0;
 
 	memset(pFileMem, 0x00, dwSize);
 	memset(pFileDisk, 0x00, dwSize);
@@ -51,7 +110,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 
 
 	//
-	// This works out where the .text is we need in memory
+	// Some reading in the different headers we need i.e. DOS then NT
 	//
 	IMAGE_DOS_HEADER imgDOSHdr;
 	if (!ReadProcessMemory(hProcess, pBaseAddress, &imgDOSHdr, sizeof(imgDOSHdr), &szReadMem))
@@ -81,7 +140,40 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 		return;
 	}
 
+	//
+	// This is all related to finding and reading the base relocations
+	//
+	fprintf(stdout, "[i] relocations at %08x of %u bytes\n", ((DWORD)pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
 
+	if (ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size > 0) {
+		dataRelocation = malloc(ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+		if (dataRelocation == NULL){
+			free(pFileMem);
+			free(pFileDisk);
+			return;
+		}
+		else {
+			DWORD dwBaseRelocAddress = (DWORD)pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+			if (!ReadProcessMemory(hProcess,
+				(LPCVOID)dwBaseRelocAddress,
+				dataRelocation,
+				ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size,
+				&szReadMem))
+			{
+				fprintf(stdout, "[!] Failed to read base relocations\n");
+				free(pFileMem);
+				free(pFileDisk);
+				free(dataRelocation);
+				return;
+			}
+
+			RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
+		}
+	}
+
+	//
+	// This works out where the .text is we need in memory
+	//
 	PVOID sectionHdrOffs = (PVOID)(
 		peHdrOffs
 		+ FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader)
@@ -91,6 +183,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 
 	IMAGE_SECTION_HEADER sections[MAX_SECTIONS];
 	PIMAGE_SECTION_HEADER pSection;
+
 
 	DWORD cSections = min(ntHdr.FileHeader.NumberOfSections, MAX_SECTIONS);
 
@@ -102,6 +195,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	{
 		free(pFileMem);
 		free(pFileDisk);
+		free(dataRelocation);
 		return;
 	}
 
@@ -162,8 +256,14 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 				dwDiffs = 0;
 				for (DWORD dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
 					if (memcmp(pFileMemCmp, pFileDiskPtr, 1) != 0)  {
-						dwDiffs++;
-						if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x: %02x versus %02x\n", dwCount, *pFileMemCmp, *pFileDiskPtr);
+						if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x (of %08x: %02x versus %02x diff %02x\n", dwCount, pSection->Misc.VirtualSize, *pFileMemCmp, *pFileDiskPtr, (*pFileMemCmp - *pFileDiskPtr) & 0xff);
+						if (IsInRelocation(dataRelocation, RelocationSize, dwCount, pBaseAddress)){
+							
+						}
+						else{
+							dwDiffs++;
+							
+						}
 					}
 					pFileMemCmp++;
 					pFileDiskPtr++;
@@ -175,6 +275,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	
 	free(pFileMem);
 	free(pFileDisk);
+	free(dataRelocation);
 }
 
 //
@@ -243,6 +344,11 @@ void AnalyzePEB(HANDLE hProcess)
 				unsigned char *strFoo[4] = {0};
 				if (ReadProcessMemory(hProcess, ldrMod.DllBase, &strFoo, sizeof(strFoo), NULL))
 				{
+
+					//if (_tcsncicmp(dllName, TEXT("C:\\windows\\SYSTEM32\\"), _tcsclen(TEXT("C:\\Windows\\System32\\"))) == 0){
+					//	pMod = ldrMod.InMemoryOrderLinks.Flink;
+						//continue;
+					//}
 					HANDLE hFile = CreateFile(dllName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 					if (hFile == INVALID_HANDLE_VALUE){

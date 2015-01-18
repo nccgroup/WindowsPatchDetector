@@ -40,3 +40,11 @@ typedef NTSTATUS (WINAPI *_NtQueryInformationProcess)(
 
 // http://downloads.securityfocus.com/vulnerabilities/exploits/26556.c
 typedef PIMAGE_NT_HEADERS(NTAPI *RTLIMAGENTHEADER)(PVOID);
+
+
+// http://uninformed.org/index.cgi?v=6&a=3&p=2
+//typedef struct _IMAGE_BASE_RELOCATION {
+//	ULONG  VirtualAddress;
+//	ULONG  SizeOfBlock;
+//	USHORT TypeOffset[1];
+//} IMAGE_BASE_RELOCATION, *PIMAGE_BASE_RELOCATION;
