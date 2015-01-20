@@ -18,16 +18,26 @@ bool bVerbose = false;
 
 _NtQueryInformationProcess __NtQueryInformationProcess = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandle(_T("ntdll.dll")), "NtQueryInformationProcess");
 
+void CleanCursor(){
+	fprintf(stderr, "\b");
+	fflush(stderr);
+}
+
+// http://stackoverflow.com/questions/199336/print-spinning-cursor-in-a-terminal-running-application-using-c
+void AdvanceCursor() {
+	static int pos = 0;
+	char cursor[4] = { '/', '-', '\\', '|' };
+	fprintf(stderr,"%c\b", cursor[pos]);
+	fflush(stderr);
+	pos = (pos + 1) % 4;
+}
 
 //
-// Function	: AnalyzeModule
-// Role		: Analyze the particular module, find its .text section in memory and disk
-//            then compare the two.
-// Notes	: This function uses code from this 1996 article by the legend Matt Pietrek
-//            http://www.microsoft.com/msj/archive/S2058.aspx
 //
-bool IsInRelocation(VOID *dataRelocation, USHORT RelocationSize, DWORD dwOffset, PVOID pBaseAddress){
+bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, PVOID pBaseAddress, DWORD dwOffset, bool bPrint, bool bPrintNoMatch, bool bPrintMatch, bool bCursor){
 
+
+	DWORD dwRelocs = 0;
 
 	//
 	// OK we've read the base relocations table into our space now
@@ -35,33 +45,48 @@ bool IsInRelocation(VOID *dataRelocation, USHORT RelocationSize, DWORD dwOffset,
 	//  - https://github.com/Cr4sh/DrvHide-PoC/blob/master/driver/src/ldr.cpp
 	//  - http://uninformed.org/index.cgi?v=6&a=3&p=2
 	// 
-	
+
 	ULONG Size = 0;
 	PIMAGE_BASE_RELOCATION pRelocation = (PIMAGE_BASE_RELOCATION)dataRelocation;
+	DWORD Addr2 = 0;
+	DWORD Addr3 = 0;
+	//fprintf(stdout, "[i] Total Size %d %08x\n", RelocationSize, RelocationSize);
+
 	while (RelocationSize > Size && pRelocation->SizeOfBlock)
 	{
+		//fprintf(stdout, "[i] Relocation block size %u\n", pRelocation->SizeOfBlock);
 		ULONG Number = (pRelocation->SizeOfBlock - 8) / 2;
+		//fprintf(stdout, "[i] Number of relocations %u\n", Number);
 		PUSHORT Rel = (PUSHORT)((PUCHAR)pRelocation + 8);
 
 		//fprintf(stdout, "[i] %p of %u\n", ((DWORD)pBaseAddress + pRelocation->VirtualAddress), pRelocation->SizeOfBlock);
 		//fprintf(stdout, "[i] %p of %u\n", pRelocation->VirtualAddress, pRelocation->SizeOfBlock);
 
-
 		for (ULONG i = 0; i < Number; i++)
 		{
+			//if (bCursor) AdvanceCursor();
 			if (Rel[i] > 0)
 			{
 				USHORT Type = (Rel[i] & 0xF000) >> 12;
 
-				DWORD Addr = (DWORD)((DWORD)pBaseAddress + pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
-				DWORD Addr2 = (DWORD)(pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
-			
-				fprintf(stdout, "[i] %p %p %p \n", Addr, Addr2, dwOffset);
-
-				//if (Type == IMAGE_REL_BASED_HIGHLOW){
-					if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 4)) {
-						return true;
-					}
+				//DWORD Addr = (DWORD)((DWORD)pBaseAddress + pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
+				//(DWORD)(pRelocation->VirtualAddress +
+				Addr2 = ((DWORD)pRelocation->VirtualAddress + ( Rel[i] & 0x0FFF));
+				Addr3 = Rel[i] & 0x0FFF;
+				if (Addr2 >= dwOffset && dwOffset <= (Addr2 + 4)) {
+					if(bPrintMatch) fprintf(stdout, "[i] Match 1\n");
+					if(bCursor)CleanCursor();
+					return true;
+				}
+				else if (Addr3 == dwOffset && dwOffset <= (Addr3 + 4)) {
+					if (bPrintMatch) fprintf(stdout, "[i] Match 2\n");
+					if (bCursor)CleanCursor();
+					return true;
+				}
+				else if (bPrintNoMatch == true) fprintf(stdout, "[i] Nomatch %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
+				else if (dwOffset == 0 && bPrint == true) fprintf(stdout, "[i] Relocation %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
+				//fprintf(stdout, "[i] %p\n", Addr2);
+				dwRelocs++;
 				//}
 			}
 		}
@@ -70,9 +95,11 @@ bool IsInRelocation(VOID *dataRelocation, USHORT RelocationSize, DWORD dwOffset,
 		Size += pRelocation->SizeOfBlock;
 	}
 
-
+	if (bCursor)CleanCursor();
 	return false;
+	//return dwRelocs;
 }
+
 
 
 //
@@ -90,6 +117,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	unsigned char *pFileDiskPtr = pFileDisk;
 	VOID *dataRelocation = NULL;
 	ULONG RelocationSize = 0;
+	DWORD dwRelocs = 0;
 
 	memset(pFileMem, 0x00, dwSize);
 	memset(pFileDisk, 0x00, dwSize);
@@ -143,8 +171,6 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	//
 	// This is all related to finding and reading the base relocations
 	//
-	fprintf(stdout, "[i] relocations at %08x of %u bytes\n", ((DWORD)pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
-
 	if (ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size > 0) {
 		dataRelocation = malloc(ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
 		if (dataRelocation == NULL){
@@ -166,8 +192,6 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 				free(dataRelocation);
 				return;
 			}
-
-			RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
 		}
 	}
 
@@ -208,8 +232,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	bool bFound = false;
 	for (DWORD i = 0; i < cSections; i++, pSection++)
 	{
-		DWORD endRVA = pSection->VirtualAddress
-			+ max(pSection->SizeOfRawData, pSection->Misc.VirtualSize);
+		DWORD endRVA = pSection->VirtualAddress	+ max(pSection->SizeOfRawData, pSection->Misc.VirtualSize);
 		strcpy_s(strSection, (char *)pSection->Name);
 		if (strcmp(strSection, ".text") == 0){
 			bFound = true;
@@ -221,6 +244,10 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	// versus disk version
 	if (bFound == true){
 		_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p has %d relocations\n"), strDLLName, ((DWORD)pBaseAddress + pSection->VirtualAddress), pSection->NumberOfRelocations);
+
+		fprintf(stdout, "[i] Relocations at %p of %u bytes\n", ((DWORD)pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+		RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
+		//PrintRelocations(dataRelocation, RelocationSize, pBaseAddress,0, true, false, false,false);
 
 		// Read the process copy
 		if (ReadProcessMemory(hProcess, (PVOID)((DWORD)pBaseAddress + pSection->VirtualAddress), pFileMem, pSection->Misc.VirtualSize, &szReadMem)){
@@ -246,29 +273,22 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 		{
 			// Move the pointer on to sections data
 			pFileDiskPtr += pSection->PointerToRawData;
-
 			if (memcmp(pFileMem, pFileDiskPtr, pSection->Misc.VirtualSize) == 0){
-				//fprintf(stdout, "[*****] Same\n");
+
 			}
 			else {
-				//fprintf(stdout, "[!!!!!] Different\n");
-				
 				dwDiffs = 0;
 				for (DWORD dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
 					if (memcmp(pFileMemCmp, pFileDiskPtr, 1) != 0)  {
-						if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x (of %08x: %02x versus %02x diff %02x\n", dwCount, pSection->Misc.VirtualSize, *pFileMemCmp, *pFileDiskPtr, (*pFileMemCmp - *pFileDiskPtr) & 0xff);
-						if (IsInRelocation(dataRelocation, RelocationSize, dwCount, pBaseAddress)){
-							
-						}
-						else{
+						if (PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, (pSection->VirtualAddress + dwCount),false,false,false,true) == false){
 							dwDiffs++;
-							
+							if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x (%08x) of %d: %02x versus %02x diff %02x\n", dwCount, (pSection->VirtualAddress + dwCount), pSection->Misc.VirtualSize, *pFileMemCmp, *pFileDiskPtr, (*pFileMemCmp - *pFileDiskPtr) & 0xff);
 						}
 					}
 					pFileMemCmp++;
 					pFileDiskPtr++;
 				}
-				fprintf(stdout, "[!] %d bytes different from a total of %d \n", dwDiffs, pSection->Misc.VirtualSize);
+				fprintf(stdout, "[!] %d bytes different from a total of %d - relocs %d \n", dwDiffs, pSection->Misc.VirtualSize, dwRelocs);
 			}
 		}
 	}
@@ -359,6 +379,7 @@ void AnalyzePEB(HANDLE hProcess)
 						DWORD dwSize = GetFileSize(hFile, NULL);
 						AnalyzeModule(hProcess, ldrMod.DllBase, dwSize, hFile,dllName);
 						CloseHandle(hFile);
+						//break;
 					}
 					
 				}
