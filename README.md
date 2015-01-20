@@ -43,12 +43,18 @@ C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDete
 ###### Example Output (unpatched binary)
 ```
 [*] Experimental Windows Patch Detector - https://github.com/olliencc/WindowsPatchDetector
-[*] NCC Group Plc - http://www.nccgroup.com/
+[*] NCC Group Plc - http://www.nccgroup.com/ 
 [*] -h for help 
 [i] + [Amazon Music Helper.exe - PID: 6104 in session 1 - window station Console]
 [i] Module C:\Users\Ollie\AppData\Local\Amazon Music\Amazon Music Helper.exe .text section at virtual address 00941000 has 0 relocations
 [i] Relocations at 00F15000 of 149092 bytes
-[!] 0 bytes different from a total of 4156286 - relocs 0 
+[diff] Offset 0000000e (0000100e) of 4156286: 90 versus e8 diff a8
+[diff] Offset 0000000f (0000100f) of 4156286: 90 versus 55 diff 3b
+[diff] Offset 00000010 (00001010) of 4156286: 90 versus 94 diff fc
+[diff] Offset 00000011 (00001011) of 4156286: 90 versus 02 diff 8e
+[diff] Offset 00000012 (00001012) of 4156286: 90 versus 00 diff 90
+[diff] Offset 00000013 (00001013) of 4156286: 90 versus 59 diff 37
+[!] 6 bytes different from a total of 4156286 - relocs 0 
 [i] Module C:\windows\SYSTEM32\ntdll.dll .text section at virtual address 778E1000 has 0 relocations
 [i] Relocations at 77A42000 of 16956 bytes
 [!] 0 bytes different from a total of 1005011 - relocs 0 
@@ -63,7 +69,23 @@ C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDete
 [!] 0 bytes different from a total of 215027 - relocs 0 
 [i] Module C:\windows\SYSTEM32\USER32.dll .text section at virtual address 754D1000 has 0 relocations
 [i] Relocations at 75617000 of 17804 bytes
-[!] 0 bytes different from a total of 508412 - relocs 0 
+[diff] Offset 000002a4 (000012a4) of 508412: c0 versus a6 diff 1a
+[diff] Offset 000002a5 (000012a5) of 508412: 8b versus 73 diff 18
+[diff] Offset 000002a6 (000012a6) of 508412: 43 versus 00 diff 43
+[diff] Offset 000002a7 (000012a7) of 508412: 02 versus 00 diff 02
+[diff] Offset 000002a8 (000012a8) of 508412: d0 versus c1 diff 0f
+[diff] Offset 000002a9 (000012a9) of 508412: 8b versus 73 diff 18
+[diff] Offset 000002aa (000012aa) of 508412: 43 versus 00 diff 43
+[diff] Offset 000002ab (000012ab) of 508412: 02 versus 00 diff 02
+[diff] Offset 000002c0 (000012c0) of 508412: 00 versus dc diff 24
+[diff] Offset 000002c1 (000012c1) of 508412: 8b versus 73 diff 18
+[diff] Offset 000002c2 (000012c2) of 508412: 43 versus 00 diff 43
+[diff] Offset 000002c3 (000012c3) of 508412: 02 versus 00 diff 02
+[diff] Offset 000002c4 (000012c4) of 508412: 10 versus f7 diff 19
+[diff] Offset 000002c5 (000012c5) of 508412: 8b versus 73 diff 18
+[diff] Offset 000002c6 (000012c6) of 508412: 43 versus 00 diff 43
+[diff] Offset 000002c7 (000012c7) of 508412: 02 versus 00 diff 02
+[!] 16 bytes different from a total of 508412 - relocs 0 
 [i] Module C:\windows\SYSTEM32\SHELL32.dll .text section at virtual address 76201000 has 0 relocations
 [i] Relocations at 77350000 of 421664 bytes
 [!] 0 bytes different from a total of 7311956 - relocs 0 
@@ -84,9 +106,7 @@ C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDete
 [!] 0 bytes different from a total of 905804 - relocs 0 
 [i] Module C:\windows\SYSTEM32\NSI.dll .text section at virtual address 75F51000 has 0 relocations
 [i] Relocations at 75F56000 of 248 bytes
-[diff] Offset 00001757 (00002757) of 6440: f5 versus 00 diff f5
-[diff] Offset 00001758 (00002758) of 6440: 75 versus 10 diff 65
-[!] 2 bytes different from a total of 6440 - relocs 0 
+[!] 0 bytes different from a total of 6440 - relocs 0 
 [i] Module C:\windows\SYSTEM32\RPCRT4.dll .text section at virtual address 77761000 has 0 relocations
 [i] Relocations at 7780B000 of 20048 bytes
 [!] 0 bytes different from a total of 639180 - relocs 0 
@@ -110,9 +130,7 @@ C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDete
 [!] 0 bytes different from a total of 97074 - relocs 0 
 [i] Module C:\windows\SYSTEM32\MSASN1.dll .text section at virtual address 75FE1000 has 0 relocations
 [i] Relocations at 75FED000 of 636 bytes
-[diff] Offset 00008a5a (00009a5a) of 35567: fe versus 00 diff fe
-[diff] Offset 00008a5b (00009a5b) of 35567: 75 versus 10 diff 65
-[!] 2 bytes different from a total of 35567 - relocs 0 
+[!] 0 bytes different from a total of 35567 - relocs 0 
 [i] Module C:\windows\SYSTEM32\SspiCli.dll .text section at virtual address 752E1000 has 0 relocations
 [i] Relocations at 752FB000 of 3796 bytes
 [!] 0 bytes different from a total of 87463 - relocs 0 
@@ -166,9 +184,7 @@ C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDete
 [!] 0 bytes different from a total of 31547 - relocs 0 
 [i] Module C:\windows\SYSTEM32\kernel.appcore.dll .text section at virtual address 75111000 has 0 relocations
 [i] Relocations at 75118000 of 520 bytes
-[diff] Offset 000016f2 (000026f2) of 10040: 11 versus 00 diff 11
-[diff] Offset 000016f3 (000026f3) of 10040: 75 versus 10 diff 65
-[!] 2 bytes different from a total of 10040 - relocs 0 
+[!] 0 bytes different from a total of 10040 - relocs 0 
 [i] Module C:\windows\system32\uxtheme.dll .text section at virtual address 73C91000 has 0 relocations
 [i] Relocations at 73D63000 of 29680 bytes
 [!] 0 bytes different from a total of 807001 - relocs 0 
@@ -198,9 +214,7 @@ C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDete
 [!] 0 bytes different from a total of 96797 - relocs 0 
 [i] Module C:\windows\SYSTEM32\WINNSI.DLL .text section at virtual address 736E1000 has 0 relocations
 [i] Relocations at 736E7000 of 628 bytes
-[diff] Offset 0000275f (0000375f) of 10183: 6e versus 00 diff 6e
-[diff] Offset 00002760 (00003760) of 10183: 73 versus 10 diff 63
-[!] 2 bytes different from a total of 10183 - relocs 0 
+[!] 0 bytes different from a total of 10183 - relocs 0 
 [i] Module C:\windows\system32\PGPlsp.dll .text section at virtual address 739F1000 has 0 relocations
 [i] Relocations at 73A01000 of 2176 bytes
 [!] 0 bytes different from a total of 35098 - relocs 0 
