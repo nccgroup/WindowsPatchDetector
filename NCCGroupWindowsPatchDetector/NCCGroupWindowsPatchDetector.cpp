@@ -73,12 +73,12 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, PVOID pBaseAdd
 				//(DWORD)(pRelocation->VirtualAddress +
 				Addr2 = ((DWORD)pRelocation->VirtualAddress + ( Rel[i] & 0x0FFF));
 				Addr3 = Rel[i] & 0x0FFF;
-				if (Addr2 >= dwOffset && dwOffset <= (Addr2 + 4)) {
+				if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 4)) {
 					if(bPrintMatch) fprintf(stdout, "[i] Match 1\n");
 					if(bCursor)CleanCursor();
 					return true;
 				}
-				else if (Addr3 == dwOffset && dwOffset <= (Addr3 + 4)) {
+				else if (dwOffset >= Addr3 && dwOffset <= (Addr3 + 4)) {
 					if (bPrintMatch) fprintf(stdout, "[i] Match 2\n");
 					if (bCursor)CleanCursor();
 					return true;
