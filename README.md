@@ -48,13 +48,7 @@ C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDete
 [i] + [Amazon Music Helper.exe - PID: 6104 in session 1 - window station Console]
 [i] Module C:\Users\Ollie\AppData\Local\Amazon Music\Amazon Music Helper.exe .text section at virtual address 00941000 has 0 relocations
 [i] Relocations at 00F15000 of 149092 bytes
-[diff] Offset 0000000e (0000100e) of 4156286: 90 versus e8 diff a8
-[diff] Offset 0000000f (0000100f) of 4156286: 90 versus 55 diff 3b
-[diff] Offset 00000010 (00001010) of 4156286: 90 versus 94 diff fc
-[diff] Offset 00000011 (00001011) of 4156286: 90 versus 02 diff 8e
-[diff] Offset 00000012 (00001012) of 4156286: 90 versus 00 diff 90
-[diff] Offset 00000013 (00001013) of 4156286: 90 versus 59 diff 37
-[!] 6 bytes different from a total of 4156286 - relocs 0 
+[!] 0 bytes different from a total of 4156286 - relocs 0 
 [i] Module C:\windows\SYSTEM32\ntdll.dll .text section at virtual address 778E1000 has 0 relocations
 [i] Relocations at 77A42000 of 16956 bytes
 [!] 0 bytes different from a total of 1005011 - relocs 0 
