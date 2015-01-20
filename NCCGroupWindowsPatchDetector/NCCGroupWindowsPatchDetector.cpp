@@ -280,7 +280,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 				dwDiffs = 0;
 				for (DWORD dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
 					if (memcmp(pFileMemCmp, pFileDiskPtr, 1) != 0)  {
-						if (PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, (pSection->VirtualAddress + dwCount),false,false,false,true) == false){
+						if (PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, (pSection->VirtualAddress + dwCount),false,false,false,false) == false){
 							dwDiffs++;
 							if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x (%08x) of %d: %02x versus %02x diff %02x\n", dwCount, (pSection->VirtualAddress + dwCount), pSection->Misc.VirtualSize, *pFileMemCmp, *pFileDiskPtr, (*pFileMemCmp - *pFileDiskPtr) & 0xff);
 						}
@@ -526,7 +526,7 @@ int _tmain(int argc, _TCHAR* argv[])
 	bool	bHelp = false;
 	char	chOpt;
 
-	printf("[*] Windows Patching Detector - https://github.com/nccgroup/WindowsPatchDetector\n");
+	printf("[*] Experimental Windows Patch Detector - https://github.com/olliencc/WindowsPatchDetector\n");
 	printf("[*] NCC Group Plc - http://www.nccgroup.com/ \n");
 	printf("[*] -h for help \n");
 
