@@ -3,140 +3,210 @@
 
 Experimental: Windows .text section compare - disk versus memory
 
+###### Original Idea
+After reading about the Skeleton Key malware (http://www.secureworks.com/cyber-threat-intelligence/threats/skeleton-key-malware-analysis/) develop a small tool which would compare the .text section of .exe and .dll files on disk with their RAM equivilent to detect patches.
+
+###### Result
+Working on the whole for 32bit binaries... need to add support for 64bit...
+
 ###### Features
 This tool
 * either for specific or all 32bit Windows processes enumerates the modules (.exe's and .dll's)
 * find the .text (code) section in RAM
 * find the .text (code) section on disk
-* compares them
+* compares them taking into account base relocations
 
 ###### Command Line Options
 * -h help
 * -p [PID] - only analyze this PID
-* -v - show the byte by byte diffs (noisy!)
+* -v - show the byte by byte diffs
 
 ###### Example Output
 ```
-C:\Data\NCC\!Code\Git.Public\WindowsPatchDetector\Debug>NCCGroupWindowsPatchDetector.exe -p 4784
-[*] Windows Patching Detector - https://github.com/nccgroup/WindowsPatchDetector
+[*] Experimental Windows Patch Detector - https://github.com/olliencc/WindowsPatchDetector
 [*] NCC Group Plc - http://www.nccgroup.com/
-[*] -h for help
-[i] + [Amazon Music Helper.exe - PID: 4784 in session 1 - window station Console]
+[*] -h for help 
+[i] + [Amazon Music Helper.exe - PID: 6104 in session 1 - window station Console]
 [i] Module C:\Users\Ollie\AppData\Local\Amazon Music\Amazon Music Helper.exe .text section at virtual address 00941000 has 0 relocations
-[!] 45094 bytes different from a total of 4156286
+[i] Relocations at 00F15000 of 149092 bytes
+[!] 0 bytes different from a total of 4156286 - relocs 0 
 [i] Module C:\windows\SYSTEM32\ntdll.dll .text section at virtual address 778E1000 has 0 relocations
-[!] 14624 bytes different from a total of 1005011
+[i] Relocations at 77A42000 of 16956 bytes
+[!] 0 bytes different from a total of 1005011 - relocs 0 
 [i] Module C:\windows\SYSTEM32\KERNEL32.DLL .text section at virtual address 75CA0000 has 0 relocations
-[!] 14584 bytes different from a total of 401365
+[i] Relocations at 75DB0000 of 75024 bytes
+[!] 0 bytes different from a total of 401365 - relocs 0 
 [i] Module C:\windows\SYSTEM32\KERNELBASE.dll .text section at virtual address 75DD1000 has 0 relocations
-[!] 20976 bytes different from a total of 771728
+[i] Relocations at 75E9A000 of 23068 bytes
+[!] 0 bytes different from a total of 771728 - relocs 0 
 [i] Module C:\windows\SYSTEM32\WS2_32.dll .text section at virtual address 75F01000 has 0 relocations
-[!] 9286 bytes different from a total of 215027
+[i] Relocations at 75F4A000 of 9800 bytes
+[!] 0 bytes different from a total of 215027 - relocs 0 
 [i] Module C:\windows\SYSTEM32\USER32.dll .text section at virtual address 754D1000 has 0 relocations
-[!] 16452 bytes different from a total of 508412
+[i] Relocations at 75617000 of 17804 bytes
+[!] 0 bytes different from a total of 508412 - relocs 0 
 [i] Module C:\windows\SYSTEM32\SHELL32.dll .text section at virtual address 76201000 has 0 relocations
-[!] 402436 bytes different from a total of 7311956
+[i] Relocations at 77350000 of 421664 bytes
+[!] 0 bytes different from a total of 7311956 - relocs 0 
 [i] Module C:\windows\SYSTEM32\ole32.dll .text section at virtual address 75321000 has 0 relocations
-[!] 38088 bytes different from a total of 930478
+[i] Relocations at 75422000 of 40604 bytes
+[!] 0 bytes different from a total of 930478 - relocs 0 
 [i] Module C:\windows\SYSTEM32\OLEAUT32.dll .text section at virtual address 77651000 has 0 relocations
-[!] 23630 bytes different from a total of 545189
+[i] Relocations at 776DE000 of 25116 bytes
+[!] 0 bytes different from a total of 545189 - relocs 0 
 [i] Module C:\windows\SYSTEM32\ADVAPI32.dll .text section at virtual address 75FF1000 has 0 relocations
-[!] 16946 bytes different from a total of 422057
+[i] Relocations at 76063000 of 18220 bytes
+[!] 0 bytes different from a total of 422057 - relocs 0 
 [i] Module C:\windows\SYSTEM32\WINMM.dll .text section at virtual address 742E1000 has 0 relocations
-[!] 5544 bytes different from a total of 80266
+[i] Relocations at 742FE000 of 5772 bytes
+[!] 0 bytes different from a total of 80266 - relocs 0 
 [i] Module C:\windows\SYSTEM32\CRYPT32.dll .text section at virtual address 76071000 has 0 relocations
-[!] 35518 bytes different from a total of 905804
+[i] Relocations at 761EE000 of 37816 bytes
+[!] 0 bytes different from a total of 905804 - relocs 0 
 [i] Module C:\windows\SYSTEM32\NSI.dll .text section at virtual address 75F51000 has 0 relocations
-[!] 228 bytes different from a total of 6440
+[i] Relocations at 75F56000 of 248 bytes
+[diff] Offset 00001757 (00002757) of 6440: f5 versus 00 diff f5
+[diff] Offset 00001758 (00002758) of 6440: 75 versus 10 diff 65
+[!] 2 bytes different from a total of 6440 - relocs 0 
 [i] Module C:\windows\SYSTEM32\RPCRT4.dll .text section at virtual address 77761000 has 0 relocations
-[!] 18028 bytes different from a total of 639180
+[i] Relocations at 7780B000 of 20048 bytes
+[!] 0 bytes different from a total of 639180 - relocs 0 
 [i] Module C:\windows\SYSTEM32\GDI32.dll .text section at virtual address 773C1000 has 0 relocations
-[!] 15586 bytes different from a total of 957247
+[i] Relocations at 774C2000 of 17348 bytes
+[!] 0 bytes different from a total of 957247 - relocs 0 
 [i] Module C:\windows\SYSTEM32\msvcrt.dll .text section at virtual address 77591000 has 0 relocations
-[!] 12200 bytes different from a total of 719071
+[i] Relocations at 7764A000 of 14360 bytes
+[!] 0 bytes different from a total of 719071 - relocs 0 
 [i] Module C:\windows\SYSTEM32\combase.dll .text section at virtual address 75831000 has 0 relocations
-[!] 68504 bytes different from a total of 1107156
+[i] Relocations at 7596B000 of 76008 bytes
+[!] 0 bytes different from a total of 1107156 - relocs 0 
 [i] Module C:\windows\SYSTEM32\SHLWAPI.dll .text section at virtual address 75B31000 has 0 relocations
-[!] 7926 bytes different from a total of 220948
+[i] Relocations at 75B6E000 of 8744 bytes
+[!] 0 bytes different from a total of 220948 - relocs 0 
 [i] Module C:\windows\SYSTEM32\sechost.dll .text section at virtual address 75621000 has 0 relocations
-[!] 7448 bytes different from a total of 211508
+[i] Relocations at 7565C000 of 8064 bytes
+[!] 0 bytes different from a total of 211508 - relocs 0 
 [i] Module C:\windows\SYSTEM32\WINMMBASE.dll .text section at virtual address 74081000 has 0 relocations
-[!] 5292 bytes different from a total of 97074
+[i] Relocations at 7409E000 of 5636 bytes
+[!] 0 bytes different from a total of 97074 - relocs 0 
 [i] Module C:\windows\SYSTEM32\MSASN1.dll .text section at virtual address 75FE1000 has 0 relocations
-[!] 568 bytes different from a total of 35567
+[i] Relocations at 75FED000 of 636 bytes
+[diff] Offset 00008a5a (00009a5a) of 35567: fe versus 00 diff fe
+[diff] Offset 00008a5b (00009a5b) of 35567: 75 versus 10 diff 65
+[!] 2 bytes different from a total of 35567 - relocs 0 
 [i] Module C:\windows\SYSTEM32\SspiCli.dll .text section at virtual address 752E1000 has 0 relocations
-[!] 3362 bytes different from a total of 87463
+[i] Relocations at 752FB000 of 3796 bytes
+[!] 0 bytes different from a total of 87463 - relocs 0 
 [i] Module C:\windows\SYSTEM32\cfgmgr32.dll .text section at virtual address 756A1000 has 0 relocations
-[!] 6954 bytes different from a total of 207169
+[i] Relocations at 756D8000 of 7604 bytes
+[!] 0 bytes different from a total of 207169 - relocs 0 
 [i] Module C:\windows\SYSTEM32\DEVOBJ.dll .text section at virtual address 73E01000 has 0 relocations
-[!] 5532 bytes different from a total of 97575
+[i] Relocations at 73E1D000 of 5764 bytes
+[!] 0 bytes different from a total of 97575 - relocs 0 
 [i] Module C:\windows\SYSTEM32\CRYPTBASE.dll .text section at virtual address 752D1000 has 0 relocations
-[!] 856 bytes different from a total of 15474
+[i] Relocations at 752D8000 of 920 bytes
+[!] 0 bytes different from a total of 15474 - relocs 0 
 [i] Module C:\windows\SYSTEM32\bcryptPrimitives.dll .text section at virtual address 75271000 has 0 relocations
-[!] 5864 bytes different from a total of 310965
+[i] Relocations at 752C0000 of 6520 bytes
+[!] 0 bytes different from a total of 310965 - relocs 0 
 [i] Module C:\windows\system32\IMM32.DLL .text section at virtual address 774D1000 has 0 relocations
-[!] 4056 bytes different from a total of 103947
+[i] Relocations at 774F3000 of 4348 bytes
+[!] 0 bytes different from a total of 103947 - relocs 0 
 [i] Module C:\windows\SYSTEM32\MSCTF.dll .text section at virtual address 75B91000 has 0 relocations
-[!] 25900 bytes different from a total of 686822
-[i] Module C:\windows\WinSxS\x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.9600.17031_none_a9efdb8b01377ea7\comctl32.dll .text section
- virtual address 703D1000 has 0 relocations
-[!] 70602 bytes different from a total of 1606349
+[i] Relocations at 75C80000 of 27460 bytes
+[!] 0 bytes different from a total of 686822 - relocs 0 
+[i] Module C:\windows\WinSxS\x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.9600.17031_none_a9efdb8b01377ea7\comctl32.dll .text section at virtual address 703D1000 has 0 relocations
+[i] Relocations at 705A3000 of 74540 bytes
+[!] 0 bytes different from a total of 1606349 - relocs 0 
 [i] Module C:\windows\SYSTEM32\SHCORE.dll .text section at virtual address 73D81000 has 0 relocations
-[!] 24704 bytes different from a total of 424383
+[i] Relocations at 73DEF000 of 25936 bytes
+[!] 0 bytes different from a total of 424383 - relocs 0 
 [i] Module C:\windows\SYSTEM32\ntmarta.dll .text section at virtual address 72C01000 has 0 relocations
-[!] 5044 bytes different from a total of 118276
+[i] Relocations at 72C23000 of 5480 bytes
+[!] 0 bytes different from a total of 118276 - relocs 0 
 [i] Module C:\windows\system32\napinsp.dll .text section at virtual address 72A11000 has 0 relocations
-[!] 2774 bytes different from a total of 43988
+[i] Relocations at 72A1F000 of 2888 bytes
+[!] 0 bytes different from a total of 43988 - relocs 0 
 [i] Module C:\windows\system32\pnrpnsp.dll .text section at virtual address 729F1000 has 0 relocations
-[!] 4028 bytes different from a total of 57156
+[i] Relocations at 72A02000 of 4188 bytes
+[!] 0 bytes different from a total of 57156 - relocs 0 
 [i] Module C:\windows\system32\NLAapi.dll .text section at virtual address 729D1000 has 0 relocations
-[!] 2982 bytes different from a total of 53523
+[i] Relocations at 729E3000 of 3140 bytes
+[!] 0 bytes different from a total of 53523 - relocs 0 
 [i] Module C:\windows\System32\mswsock.dll .text section at virtual address 73A11000 has 0 relocations
-[!] 8560 bytes different from a total of 179304
+[i] Relocations at 73A52000 of 11856 bytes
+[!] 0 bytes different from a total of 179304 - relocs 0 
 [i] Module C:\windows\SYSTEM32\DNSAPI.dll .text section at virtual address 735F1000 has 0 relocations
-[!] 19776 bytes different from a total of 420007
+[i] Relocations at 73666000 of 21824 bytes
+[!] 0 bytes different from a total of 420007 - relocs 0 
 [i] Module C:\windows\System32\winrnr.dll .text section at virtual address 729C1000 has 0 relocations
-[!] 752 bytes different from a total of 14763
+[i] Relocations at 729C8000 of 872 bytes
+[!] 0 bytes different from a total of 14763 - relocs 0 
 [i] Module C:\windows\system32\wshbth.dll .text section at virtual address 729B1000 has 0 relocations
-[!] 2210 bytes different from a total of 31547
+[i] Relocations at 729BE000 of 2412 bytes
+[!] 0 bytes different from a total of 31547 - relocs 0 
 [i] Module C:\windows\SYSTEM32\kernel.appcore.dll .text section at virtual address 75111000 has 0 relocations
-[!] 502 bytes different from a total of 10040
+[i] Relocations at 75118000 of 520 bytes
+[diff] Offset 000016f2 (000026f2) of 10040: 11 versus 00 diff 11
+[diff] Offset 000016f3 (000026f3) of 10040: 75 versus 10 diff 65
+[!] 2 bytes different from a total of 10040 - relocs 0 
 [i] Module C:\windows\system32\uxtheme.dll .text section at virtual address 73C91000 has 0 relocations
-[!] 24144 bytes different from a total of 807001
+[i] Relocations at 73D63000 of 29680 bytes
+[!] 0 bytes different from a total of 807001 - relocs 0 
+[i] Module C:\windows\SYSTEM32\PGPhk.dll .text section at virtual address 6E611000 has 0 relocations
+[i] Relocations at 6E61C000 of 1556 bytes
+[!] 0 bytes different from a total of 19834 - relocs 0 
 [i] Module C:\Program Files (x86)\Common Files\microsoft shared\ink\tiptsf.dll .text section at virtual address 6FA71000 has 0 relocations
-[!] 17038 bytes different from a total of 310243
+[i] Relocations at 6FAD6000 of 18176 bytes
+[!] 0 bytes different from a total of 310243 - relocs 0 
 [i] Module C:\windows\SYSTEM32\clbcatq.dll .text section at virtual address 75F61000 has 0 relocations
-[!] 14518 bytes different from a total of 455708
+[i] Relocations at 75FD9000 of 15984 bytes
+[!] 0 bytes different from a total of 455708 - relocs 0 
 [i] Module C:\windows\SYSTEM32\CRYPTSP.dll .text section at virtual address 747E1000 has 0 relocations
-[!] 1850 bytes different from a total of 76176
+[i] Relocations at 747F7000 of 2016 bytes
+[!] 0 bytes different from a total of 76176 - relocs 0 
 [i] Module C:\windows\system32\rsaenh.dll .text section at virtual address 747B1000 has 0 relocations
-[!] 8492 bytes different from a total of 136675
+[i] Relocations at 747DC000 of 8848 bytes
+[!] 0 bytes different from a total of 136675 - relocs 0 
 [i] Module C:\windows\SYSTEM32\bcrypt.dll .text section at virtual address 74801000 has 0 relocations
-[!] 2268 bytes different from a total of 97402
-[i] Module C:\windows\system32\PGPlsp.dll .text section at virtual address 739F1000 has 0 relocations
-[!] 1674 bytes different from a total of 35098
-[i] Module C:\windows\system32\dwmapi.dll .text section at virtual address 73C71000 has 0 relocations
-[!] 2802 bytes different from a total of 51671
+[i] Relocations at 7481C000 of 2496 bytes
+[!] 0 bytes different from a total of 97402 - relocs 0 
 [i] Module C:\Windows\System32\rasadhlp.dll .text section at virtual address 72A21000 has 0 relocations
-[!] 356 bytes different from a total of 5881
+[i] Relocations at 72A26000 of 388 bytes
+[!] 0 bytes different from a total of 5881 - relocs 0 
 [i] Module C:\windows\SYSTEM32\IPHLPAPI.DLL .text section at virtual address 73741000 has 0 relocations
-[!] 2472 bytes different from a total of 96797
+[i] Relocations at 7375D000 of 2736 bytes
+[!] 0 bytes different from a total of 96797 - relocs 0 
 [i] Module C:\windows\SYSTEM32\WINNSI.DLL .text section at virtual address 736E1000 has 0 relocations
-[!] 602 bytes different from a total of 10183
-[i] Module C:\windows\system32\apphelp.dll .text section at virtual address 751D1000 has 0 relocations
-[!] 21234 bytes different from a total of 474628
+[i] Relocations at 736E7000 of 628 bytes
+[diff] Offset 0000275f (0000375f) of 10183: 6e versus 00 diff 6e
+[diff] Offset 00002760 (00003760) of 10183: 73 versus 10 diff 63
+[!] 2 bytes different from a total of 10183 - relocs 0 
+[i] Module C:\windows\system32\PGPlsp.dll .text section at virtual address 739F1000 has 0 relocations
+[i] Relocations at 73A01000 of 2176 bytes
+[!] 0 bytes different from a total of 35098 - relocs 0 
+[i] Module C:\windows\system32\dwmapi.dll .text section at virtual address 73C71000 has 0 relocations
+[i] Relocations at 73C87000 of 2984 bytes
+[!] 0 bytes different from a total of 51671 - relocs 0 
 [i] Module C:\windows\System32\fwpuclnt.dll .text section at virtual address 72961000 has 0 relocations
-[!] 7088 bytes different from a total of 242369
+[i] Relocations at 729A2000 of 7632 bytes
+[!] 0 bytes different from a total of 242369 - relocs 0 
 [i] Module C:\windows\SYSTEM32\gpapi.dll .text section at virtual address 72B91000 has 0 relocations
-[!] 3882 bytes different from a total of 85034
+[i] Relocations at 72BAC000 of 4196 bytes
+[!] 0 bytes different from a total of 85034 - relocs 0 
 [i] Module C:\windows\SYSTEM32\ncrypt.dll .text section at virtual address 72BE1000 has 0 relocations
-[!] 3510 bytes different from a total of 84035
+[i] Relocations at 72BFB000 of 3724 bytes
+[!] 0 bytes different from a total of 84035 - relocs 0 
 [i] Module C:\windows\SYSTEM32\NTASN1.dll .text section at virtual address 72BB1000 has 0 relocations
-[!] 7558 bytes different from a total of 145303
+[i] Relocations at 72BD8000 of 8092 bytes
+[!] 0 bytes different from a total of 145303 - relocs 0 
 [i] Module C:\Windows\SYSTEM32\cryptnet.dll .text section at virtual address 6F741000 has 0 relocations
-[!] 4692 bytes different from a total of 122001
+[i] Relocations at 6F763000 of 5052 bytes
+[!] 0 bytes different from a total of 122001 - relocs 0 
 [i] Module C:\windows\SYSTEM32\WLDAP32.dll .text section at virtual address 75EA1000 has 0 relocations
-[!] 15254 bytes different from a total of 293784
+[i] Relocations at 75EED000 of 15952 bytes
+[!] 0 bytes different from a total of 293784 - relocs 0 
 [i] Module C:\windows\SYSTEM32\profapi.dll .text section at virtual address 73D71000 has 0 relocations
-[!] 1352 bytes different from a total of 32948
+[i] Relocations at 73D7D000 of 1472 bytes
+[!] 0 bytes different from a total of 32948 - relocs 0 
 ```
