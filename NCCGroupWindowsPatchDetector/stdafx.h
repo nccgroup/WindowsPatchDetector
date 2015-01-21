@@ -18,7 +18,7 @@ Released under AGPL see LICENSE for more information
 #define _WIN32_WINNT 0x0600	// Change this to the appropriate value to target other versions of Windows.
 #endif						
 
-
+#include "stdafx.h"
 #include <stdio.h>
 #include <tchar.h>
 #include <windows.h>

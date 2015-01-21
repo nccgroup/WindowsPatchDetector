@@ -17,6 +17,7 @@ Released under AGPL see LICENSE for more information
 HANDLE	hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 bool	bVerbose = false;
 TCHAR	strErrMsg[1024];
+DWORD	dwModuleRelocs = 0;
 
 // Manual imports
 _NtQueryInformationProcess __NtQueryInformationProcess = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandle(_T("ntdll.dll")), "NtQueryInformationProcess");
@@ -42,7 +43,7 @@ BOOL IsWow64()
 // Function	: PrintRelocations
 // Role		: Used for printing and checking if an address is in a relocation
 //
-bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBaseAddress, DWORD dwOffset, bool bPrint, bool bPrintNoMatch, bool bPrintMatch){
+bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBaseAddress, DWORD dwOffset, bool bPrint, bool bPrintNoMatch, bool bPrintMatch, bool bCount){
 
 
 	DWORD dwRelocs = 0;
@@ -77,23 +78,28 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBas
 			{
 				USHORT Type = (Rel[i] & 0xF000) >> 12;
 
-				//DWORD Addr = (DWORD)((DWORD)pBaseAddress + pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
-				//(DWORD)(pRelocation->VirtualAddress +
-				Addr2 = (pRelocation->VirtualAddress + ( Rel[i] & 0x0FFF));
-				Addr3 = Rel[i] & 0x0FFF;
-				if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 4)) {
-					if(bPrintMatch) fprintf(stdout, "[i] Match 1\n");
-					return true;
+				if (bCount == false)
+				{
+					//DWORD Addr = (DWORD)((DWORD)pBaseAddress + pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
+					//(DWORD)(pRelocation->VirtualAddress +
+					Addr2 = (pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
+					Addr3 = Rel[i] & 0x0FFF;
+					if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 4)) {
+						if (bPrintMatch) fprintf(stdout, "[i] Match 1\n");
+						return true;
+					}
+					else if (dwOffset >= Addr3 && dwOffset <= (Addr3 + 4)) {
+						if (bPrintMatch) fprintf(stdout, "[i] Match 2\n");
+						return true;
+					}
+					else if (bPrintNoMatch == true) fprintf(stdout, "[i] Nomatch %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
+					else if (dwOffset == 0 && bPrint == true) fprintf(stdout, "[i] Relocation %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
 				}
-				else if (dwOffset >= Addr3 && dwOffset <= (Addr3 + 4)) {
-					if (bPrintMatch) fprintf(stdout, "[i] Match 2\n");
-					return true;
+				else 
+				{
+					dwRelocs++;
 				}
-				else if (bPrintNoMatch == true) fprintf(stdout, "[i] Nomatch %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
-				else if (dwOffset == 0 && bPrint == true) fprintf(stdout, "[i] Relocation %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
-				//fprintf(stdout, "[i] %p\n", Addr2);
-				dwRelocs++;
-				//}
+			
 			}
 		}
 
@@ -101,6 +107,7 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBas
 		Size += pRelocation->SizeOfBlock;
 	}
 
+	if (dwModuleRelocs == 0 && bCount == true) dwModuleRelocs = dwRelocs;
 	return false;
 }
 
@@ -119,14 +126,14 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	unsigned char *pFileMemCmp = pFileMem;
 	unsigned char *pFileDisk = (unsigned char *)malloc(dwSize);
 	unsigned char *pFileDiskPtr = pFileDisk;
-	VOID *dataRelocation = NULL;
+	DWORD_PTR *dataRelocation = 0;
 	ULONG RelocationSize = 0;
-	DWORD dwRelocs = 0;
+	dwModuleRelocs = 0;
 
 	memset(pFileMem, 0x00, dwSize);
 	memset(pFileDisk, 0x00, dwSize);
 
-	DWORD szReadMem = 0;
+	//DWORD szReadMem = 0;
 	DWORD szReadDisk = 0;
 	DWORD dwDiffs = 0;
 
@@ -145,20 +152,29 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	// Some reading in the different headers we need i.e. DOS then NT
 	//
 	IMAGE_DOS_HEADER imgDOSHdr;
-	if (!ReadProcessMemory(hProcess, (LPCVOID)pBaseAddress, &imgDOSHdr, sizeof(imgDOSHdr), (SIZE_T*)&szReadMem))
+	if (!ReadProcessMemory(hProcess, (LPCVOID)pBaseAddress, &imgDOSHdr, sizeof(imgDOSHdr), NULL))
 	{
 		free(pFileMem);
 		free(pFileDisk);
 		return;
 	}
 
-	// fprintf(stdout, "[i] Offset of PE header %p\n", imgDOSHdr.e_lfanew);
+	// 
 	DWORD_PTR peHdrOffs = pBaseAddress + imgDOSHdr.e_lfanew;
+	//fprintf(stdout, "[i] Offset of PE header %p - %p\n", imgDOSHdr.e_lfanew, peHdrOffs);
 
 	IMAGE_NT_HEADERS ntHdr;
 
-	if (!ReadProcessMemory(hProcess, (LPCVOID)peHdrOffs, &ntHdr, sizeof(ntHdr), (SIZE_T*)&szReadMem))
+	if (!ReadProcessMemory(hProcess, (LPCVOID)peHdrOffs, &ntHdr, sizeof(ntHdr), NULL))
 	{
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] Failed to read PE header- %s"), strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] Failed to read PE header - Error: %d\n"), GetLastError());
+		}
 		free(pFileMem);
 		free(pFileDisk);
 		return;
@@ -167,6 +183,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 
 	if (IMAGE_NT_SIGNATURE != ntHdr.Signature)
 	{
+		_ftprintf(stdout, TEXT("[!] PE header signature incorrect\n"));
 		free(pFileMem);
 		free(pFileDisk);
 		return;
@@ -176,7 +193,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	// This is all related to finding and reading the base relocations
 	//
 	if (ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size > 0) {
-		dataRelocation = malloc(ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+		dataRelocation = (DWORD_PTR*)malloc(ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
 		if (dataRelocation == NULL){
 			free(pFileMem);
 			free(pFileDisk);
@@ -188,15 +205,28 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 				(LPCVOID)dwBaseRelocAddress,
 				dataRelocation,
 				ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size,
-				(SIZE_T*)&szReadMem))
+				NULL))
 			{
-				fprintf(stdout, "[!] Failed to read base relocations\n");
+				DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+				if (dwRet != 0){
+					_ftprintf(stdout, TEXT("[!] Failed to read base relocations- %s"), strErrMsg);
+				}
+				else
+				{
+					_ftprintf(stdout, TEXT("[!] Failed to read base relocations- Error: %d\n"), GetLastError());
+				}
 				free(pFileMem);
 				free(pFileDisk);
 				free(dataRelocation);
 				return;
 			}
 		}
+	}
+	else {
+		// TODO: Error message?
+		free(pFileMem);
+		free(pFileDisk);
+		return;
 	}
 
 	//
@@ -209,7 +239,6 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 								);
 
 	#define MAX_SECTIONS 128
-
 	IMAGE_SECTION_HEADER sections[MAX_SECTIONS];
 	PIMAGE_SECTION_HEADER pSection;
 
@@ -220,8 +249,16 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 		(LPCVOID)sectionHdrOffs,
 		&sections,
 		cSections * IMAGE_SIZEOF_SECTION_HEADER,
-		(SIZE_T*)&szReadMem))
+		NULL))
 	{
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] Failed to read section headers - %s"), strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] Failed to read section headers  - Error: %d\n"), GetLastError());
+		}
 		free(pFileMem);
 		free(pFileDisk);
 		free(dataRelocation);
@@ -234,9 +271,9 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	DWORD dwSection = 0;
 	pSection = (PIMAGE_SECTION_HEADER)&sections;
 	bool bFound = false;
-	for (DWORD i = 0; i < cSections; i++, pSection++)
+	for (DWORD_PTR i = 0; i < cSections; i++, pSection++)
 	{
-		DWORD endRVA = pSection->VirtualAddress	+ max(pSection->SizeOfRawData, pSection->Misc.VirtualSize);
+		DWORD_PTR endRVA = pSection->VirtualAddress	+ max(pSection->SizeOfRawData, pSection->Misc.VirtualSize);
 		strcpy_s(strSection, (char *)pSection->Name);
 		if (strcmp(strSection, ".text") == 0){
 			bFound = true;
@@ -247,41 +284,52 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	// OK we've found it now compare the RAM
 	// versus disk version
 	if (bFound == true){
-		//_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p has %d relocations\n"), strDLLName, ((DWORD)pBaseAddress + pSection->VirtualAddress), pSection->NumberOfRelocations);
-		_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p of %d bytes\n"), strDLLName, ((DWORD)pBaseAddress + pSection->VirtualAddress), pSection->SizeOfRawData);
+		_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p of %d bytes\n"), strDLLName, (pBaseAddress + pSection->VirtualAddress), pSection->SizeOfRawData);
 
-		fprintf(stdout, "[i] Relocations at %p of %u bytes\n", (pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
 		RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
-		//PrintRelocations(dataRelocation, RelocationSize, pBaseAddress,0, true, false, false,false);
+		PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, 0, false, false, false, true);
+		fprintf(stdout, "[i] Relocations at %p of %u bytes with %d relocations\n", (pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size, dwModuleRelocs);
 
 		// Read the process copy
-		if (ReadProcessMemory(hProcess, (LPCVOID)(pBaseAddress + pSection->VirtualAddress), pFileMem, pSection->Misc.VirtualSize, (SIZE_T*)&szReadMem)){
-			//fprintf(stdout, "[i] Read process memory copy - asked for %d got %d\n", pSection->Misc.VirtualSize, szReadMem);
-		}
-		else {
-			fprintf(stdout, "[!] Failed process memory read %d\n", GetLastError());
-		}
-
-		if (ReadFile(hFile, pFileDisk, dwSize, &szReadDisk, NULL)){
-			//fprintf(stdout, "[i] Read disk copy - asked for %d got %d\n", dwSize, szReadDisk);
-		}
-		else {
+		if (!ReadProcessMemory(hProcess, (LPCVOID)(pBaseAddress + pSection->VirtualAddress), pFileMem, pSection->Misc.VirtualSize, NULL))
+		{
 			DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
 			if (dwRet != 0){
-				_ftprintf(stdout, TEXT("[!] Failed disk read with of %d bytes at %p - %s"), pSection->Misc.VirtualSize, pSection->PointerToRawData,strErrMsg);
+				_ftprintf(stdout, TEXT("[!] Failed process memory read - %s"), strErrMsg);
 			}
 			else
 			{
-				_ftprintf(stdout, TEXT("[!] Failed disk read with of %d bytes at %p - Error: %d\n"), pSection->Misc.VirtualSize, pSection->PointerToRawData, GetLastError());
+				_ftprintf(stdout, TEXT("[!] Failed process memory read - Error: %d\n"), GetLastError());
 			}
+			free(pFileMem);
+			free(pFileDisk);
+			free(dataRelocation);
+			return;
+		}
+
+		// Read the disk copy
+		if (!ReadFile(hFile, pFileDisk, dwSize, &szReadDisk, NULL)){
+			DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+			if (dwRet != 0){
+				_ftprintf(stdout, TEXT("[!] Failed disk read - %s"),  strErrMsg);
+			}
+			else
+			{
+				_ftprintf(stdout, TEXT("[!] Failed disk read - Error: %d\n"), GetLastError());
+			}
+			free(pFileMem);
+			free(pFileDisk);
+			free(dataRelocation);
+			return;
 		}
 
 
+		// Main comparison logic
 		if ((pSection->PointerToRawData + pSection->Misc.VirtualSize) > dwSize)
 		{
-			fprintf(stdout, "[!] Pointer looks duff\n"); 
+			fprintf(stdout, "[!] Pointer looks duff\n");
 		}
-		else 
+		else
 		{
 			// Move the pointer on to sections data
 			pFileDiskPtr += pSection->PointerToRawData;
@@ -292,17 +340,21 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 				dwDiffs = 0;
 				for (DWORD dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
 					if (memcmp(pFileMemCmp, pFileDiskPtr, 1) != 0)  {
-						if (PrintRelocations(dataRelocation, RelocationSize, (DWORD_PTR)pBaseAddress, (pSection->VirtualAddress + dwCount), false, false, false) == false){
+						//if (PrintRelocations(dataRelocation, RelocationSize, (DWORD_PTR)pBaseAddress, (pSection->VirtualAddress + dwCount), false, false, false, false) == false){
 							dwDiffs++;
 							if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x (%08x) of %d: %02x versus %02x diff %02x\n", dwCount, (pSection->VirtualAddress + dwCount), pSection->Misc.VirtualSize, *pFileMemCmp, *pFileDiskPtr, (*pFileMemCmp - *pFileDiskPtr) & 0xff);
-						}
+						//}
 					}
 					pFileMemCmp++;
 					pFileDiskPtr++;
 				}
-				fprintf(stdout, "[!] %d bytes different from a total of %d - relocs %d \n", dwDiffs, pSection->Misc.VirtualSize, dwRelocs);
+				fprintf(stdout, "[!] %d bytes different from a total of %d \n", dwDiffs, pSection->Misc.VirtualSize);
 			}
 		}
+	}
+	else 
+	{
+		fprintf(stdout, "[!] Module %s .text doesn't appear to have a .text section\n");
 	}
 	
 	free(pFileMem);
@@ -330,7 +382,7 @@ void AnalyzePEB(HANDLE hProcess)
 		sizeof(DWORD_PTR) * 6,
 		NULL);
 
-	// TODO: Check here for return for above function
+	// TODO: Check here for return for above function?
 
 	// Copy the PEB to our address space
 	PPEB pPEB = (PPEB)((DWORD_PTR*)pInfo)[1];
@@ -352,7 +404,7 @@ void AnalyzePEB(HANDLE hProcess)
 	}
 	else
 	{
-		// fprintf(stdout, "[i] PEB Address %p - Session ID %u - Being Debuged %d \n",PEBCopy.Ldr, PEBCopy.SessionId,PEBCopy.BeingDebugged);
+		fprintf(stdout, "[i] PEB Address %p - Session ID %u - Being Debuged %d \n",PEBCopy.Ldr, PEBCopy.SessionId,PEBCopy.BeingDebugged);
 	}
 
 	// Copy the PEB LDR to our address space
@@ -502,6 +554,24 @@ void AnalyzeProcess(DWORD dwPID)
 	}
 	else 
 	{ // Process handle not NULL
+		BOOL bWow64Proc = FALSE;
+		if (IsWow64Process(hProcess, &bWow64Proc) == 0){
+			DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+			if (dwRet != 0){
+				_ftprintf(stdout, TEXT("[!] Failed IsWow64Process %d - %s"), dwPID, strErrMsg);
+			}
+			else
+			{
+				_ftprintf(stdout, TEXT("[!] Failed IsWow64Process (%d) - Error:\n"), dwPID, GetLastError());
+			}
+			return;
+		}
+
+		if (bWow64Proc == TRUE && !IsWow64()){
+			fprintf(stdout, "[i] 32bit process and we're 64bit - skipping PID %d!\n", dwPID);
+			return;
+		}
+
 		if (EnumProcessModules(hProcess, hModule, 9000 * sizeof(HMODULE), &dwRet) == 0)
 		{
 			if (GetLastError() == 299 && IsWow64())
@@ -596,6 +666,16 @@ void PrintHelp(TCHAR *strExe){
 
 
 //
+// Function : PrintDebug
+// Role     :
+// Notes    :
+//
+void PrintDebug(){
+	fprintf(stdout, "[debug] PEB Size %d\n", sizeof(PEB));
+	fprintf(stdout, "[debug] DWORD_PTR Size %d\n", sizeof(DWORD_PTR));
+}
+
+//
 // Function	: _tmain
 // Role		: Entry point
 // Notes	: 
@@ -613,12 +693,15 @@ int _tmain(int argc, _TCHAR* argv[])
 
 
 	// Extract all the options
-	while ((chOpt = getopt(argc, argv, _T("p:vh"))) != EOF)
+	while ((chOpt = getopt(argc, argv, _T("p:vhd"))) != EOF)
 		switch (chOpt)
 	{
 		case _T('p'):
 			dwPID = _tstoi(optarg);
 			break;
+		case _T('d'):
+			PrintDebug();
+			return -1;
 		case _T('v'):
 			bVerbose = true;
 			break;
