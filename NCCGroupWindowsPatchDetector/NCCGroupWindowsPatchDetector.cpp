@@ -43,7 +43,7 @@ BOOL IsWow64()
 // Function	: PrintRelocations
 // Role		: Used for printing and checking if an address is in a relocation
 //
-bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBaseAddress, DWORD dwOffset, bool bPrint, bool bPrintNoMatch, bool bPrintMatch, bool bCount){
+bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBaseAddress, DWORD_PTR dwOffset, bool bPrint, bool bPrintNoMatch, bool bPrintMatch, bool bCount){
 
 
 	DWORD dwRelocs = 0;
@@ -61,18 +61,21 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBas
 	DWORD_PTR Addr3 = 0;
 	//fprintf(stdout, "[i] Total Size %d %08x\n", RelocationSize, RelocationSize);
 
+
 	while (RelocationSize > Size && pRelocation->SizeOfBlock)
 	{
+		//if (bCount) fprintf(stdout, "[i] Counting... %d %u %u\n", RelocationSize, Size, pRelocation->SizeOfBlock);
 		//fprintf(stdout, "[i] Relocation block size %u\n", pRelocation->SizeOfBlock);
 		ULONG Number = (pRelocation->SizeOfBlock - 8) / 2;
 		//fprintf(stdout, "[i] Number of relocations %u\n", Number);
 		PUSHORT Rel = (PUSHORT)((PUCHAR)pRelocation + 8);
 
-		//fprintf(stdout, "[i] %p of %u\n", ((DWORD)pBaseAddress + pRelocation->VirtualAddress), pRelocation->SizeOfBlock);
-		//fprintf(stdout, "[i] %p of %u\n", pRelocation->VirtualAddress, pRelocation->SizeOfBlock);
-
 		for (ULONG i = 0; i < Number; i++)
 		{
+			//if (bCount){
+			//	fprintf(stdout, "[i] %p / %p of %u - %d - %i\n", ((DWORD)pBaseAddress + pRelocation->VirtualAddress), pRelocation->VirtualAddress, pRelocation->SizeOfBlock,Number,i);
+			//}
+
 			//if (bCursor) AdvanceCursor();
 			if (Rel[i] > 0)
 			{
@@ -81,6 +84,7 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBas
 					Type != IMAGE_REL_BASED_DIR64)
 				{
 					// TODO: Error here?
+					fprintf(stdout, "!\n");
 					return false;
 				}
 
@@ -90,30 +94,46 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBas
 					//(DWORD)(pRelocation->VirtualAddress +
 					Addr2 = (pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
 					Addr3 = Rel[i] & 0x0FFF;
+					
+					//fprintf(stdout, "[debug] %p %p %p\n", Addr2, Addr3,dwOffset);
+#ifdef _WIN64
+					if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 8)) {
+#elif _WIN32
 					if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 4)) {
+#endif
 						if (bPrintMatch) fprintf(stdout, "[i] Match 1\n");
 						return true;
 					}
+#ifdef _WIN64
+					else if (dwOffset >= Addr3 && dwOffset <= (Addr3 + 8)) {
+#elif _WIN32
 					else if (dwOffset >= Addr3 && dwOffset <= (Addr3 + 4)) {
+#endif
+
 						if (bPrintMatch) fprintf(stdout, "[i] Match 2\n");
 						return true;
 					}
 					else if (bPrintNoMatch == true) fprintf(stdout, "[i] Nomatch %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
 					else if (dwOffset == 0 && bPrint == true) fprintf(stdout, "[i] Relocation %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
-				}
-				else 
+					}
+				else
 				{
+					//if (bCount) fprintf(stdout, ".");
+					Addr2 = (pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
+					Addr3 = Rel[i] & 0x0FFF;
+					//fprintf(stdout, "[debug] %p %p %p %p\n", Addr2, Addr3, (Addr2 + 8), dwOffset);
 					dwRelocs++;
 				}
-			
 			}
 		}
 
 		pRelocation = (PIMAGE_BASE_RELOCATION)((PUCHAR)pRelocation + pRelocation->SizeOfBlock);
 		Size += pRelocation->SizeOfBlock;
+		//if (bCount) fprintf(stdout, "[i] Next size... %d %u %u\n", RelocationSize, Size, pRelocation->SizeOfBlock);
 	}
 
 	if (dwModuleRelocs == 0 && bCount == true) dwModuleRelocs = dwRelocs;
+	//if (bCount) fprintf(stdout, "\n");
 	return false;
 }
 
@@ -268,12 +288,14 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 				return;
 			}
 		}
+		PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, 0, false, false, false, true);
 	}
 	else if (ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size > 0 && ntHdr.FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) 
 	{
 
 		RelocationSize = ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
 		dataRelocation = (DWORD_PTR*)malloc(ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+		
 		if (dataRelocation == NULL){
 			free(pFileMem);
 			free(pFileDisk);
@@ -302,6 +324,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 				return;
 			}
 		}
+		PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, 0, false, false, false, true);
 	}
 	else 
 	{
@@ -516,7 +539,7 @@ void AnalyzePEB(HANDLE hProcess)
 			TCHAR dllName[MAX_PATH] = { 0 };
 			if (ReadProcessMemory(hProcess, ldrMod.FullDllName.Buffer, &dllName, ldrMod.FullDllName.Length, NULL) && ldrMod.DllBase != NULL)
 			{
-				
+
 				HANDLE hFile = CreateFile(dllName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 				if (hFile == INVALID_HANDLE_VALUE){
 					DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
@@ -535,6 +558,7 @@ void AnalyzePEB(HANDLE hProcess)
 					CloseHandle(hFile);
 				}
 			}
+
 			pMod = ldrMod.InMemoryOrderLinks.Flink;
 		}
 	}
