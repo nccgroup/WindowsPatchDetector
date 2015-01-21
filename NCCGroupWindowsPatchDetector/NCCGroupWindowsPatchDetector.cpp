@@ -122,31 +122,37 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBas
 //
 void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE hFile, TCHAR *strDLLName)
 {
-	unsigned char *pFileMem = (unsigned char *)malloc(dwSize);
-	unsigned char *pFileMemCmp = pFileMem;
-	unsigned char *pFileDisk = (unsigned char *)malloc(dwSize);
-	unsigned char *pFileDiskPtr = pFileDisk;
+	unsigned char *pFileMem = NULL;
+	unsigned char *pFileMemCmp = NULL;
+	unsigned char *pFileDisk = NULL;
+	unsigned char *pFileDiskPtr = NULL;
 	DWORD_PTR *dataRelocation = 0;
 	ULONG RelocationSize = 0;
 	dwModuleRelocs = 0;
 
-	memset(pFileMem, 0x00, dwSize);
-	memset(pFileDisk, 0x00, dwSize);
+
 
 	//DWORD szReadMem = 0;
 	DWORD szReadDisk = 0;
 	DWORD dwDiffs = 0;
 
+	pFileMem = (unsigned char *)malloc(dwSize);
 	if (pFileMem == NULL) {
 		fprintf(stdout, "[!] Failed to allocate for memory read %d\n", dwSize);
 		return;
 	}
+	pFileMemCmp = pFileMem;
+
+	pFileDisk = (unsigned char *)malloc(dwSize);
 	if (pFileDisk == NULL) {
 		fprintf(stdout, "[!] Failed to allocate for memory read %d\n", dwSize);
-		free(pFileDisk);
+		free(pFileMem);
 		return;
 	}
-
+	pFileDiskPtr = pFileDisk;
+	
+	memset(pFileMem, 0x00, dwSize);
+	memset(pFileDisk, 0x00, dwSize);
 
 	//
 	// Some reading in the different headers we need i.e. DOS then NT
@@ -287,7 +293,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 		_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p of %d bytes\n"), strDLLName, (pBaseAddress + pSection->VirtualAddress), pSection->SizeOfRawData);
 
 		RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
-		PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, 0, false, false, false, true);
+		//PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, 0, false, false, false, true);
 		fprintf(stdout, "[i] Relocations at %p of %u bytes with %d relocations\n", (pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size, dwModuleRelocs);
 
 		// Read the process copy
@@ -338,7 +344,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 			}
 			else {
 				dwDiffs = 0;
-				for (DWORD dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
+				for (DWORD_PTR dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
 					if (memcmp(pFileMemCmp, pFileDiskPtr, 1) != 0)  {
 						//if (PrintRelocations(dataRelocation, RelocationSize, (DWORD_PTR)pBaseAddress, (pSection->VirtualAddress + dwCount), false, false, false, false) == false){
 							dwDiffs++;

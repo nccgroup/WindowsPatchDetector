@@ -33,13 +33,13 @@ Released under AGPL see LICENSE for more information
 typedef NTSTATUS (WINAPI *_NtQueryInformationProcess)(
 	IN HANDLE ProcessHandle,
 	IN PROCESSINFOCLASS ProcessInformationClass,
-	OUT PVOID ProcessInformation,
+	OUT DWORD_PTR* ProcessInformation,
 	IN ULONG ProcessInformationLength,
 	OUT PULONG ReturnLength OPTIONAL
 );
 
 // http://downloads.securityfocus.com/vulnerabilities/exploits/26556.c
-typedef PIMAGE_NT_HEADERS(NTAPI *RTLIMAGENTHEADER)(PVOID);
+typedef PIMAGE_NT_HEADERS(NTAPI *RTLIMAGENTHEADER)(DWORD_PTR);
 
 
 // http://uninformed.org/index.cgi?v=6&a=3&p=2
