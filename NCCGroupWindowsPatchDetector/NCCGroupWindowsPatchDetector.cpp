@@ -77,6 +77,12 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBas
 			if (Rel[i] > 0)
 			{
 				USHORT Type = (Rel[i] & 0xF000) >> 12;
+				if (Type != IMAGE_REL_BASED_HIGHLOW &&
+					Type != IMAGE_REL_BASED_DIR64)
+				{
+					// TODO: Error here?
+					return false;
+				}
 
 				if (bCount == false)
 				{
@@ -128,6 +134,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	unsigned char *pFileDiskPtr = NULL;
 	DWORD_PTR *dataRelocation = 0;
 	ULONG RelocationSize = 0;
+	DWORD_PTR RelocationAddress = 0;
 	dwModuleRelocs = 0;
 
 
@@ -150,7 +157,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 		return;
 	}
 	pFileDiskPtr = pFileDisk;
-	
+
 	memset(pFileMem, 0x00, dwSize);
 	memset(pFileDisk, 0x00, dwSize);
 
@@ -169,7 +176,8 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	DWORD_PTR peHdrOffs = pBaseAddress + imgDOSHdr.e_lfanew;
 	//fprintf(stdout, "[i] Offset of PE header %p - %p\n", imgDOSHdr.e_lfanew, peHdrOffs);
 
-	IMAGE_NT_HEADERS ntHdr;
+	IMAGE_NT_HEADERS32 ntHdr;
+	IMAGE_NT_HEADERS64 ntHdr64;
 
 	if (!ReadProcessMemory(hProcess, (LPCVOID)peHdrOffs, &ntHdr, sizeof(ntHdr), NULL))
 	{
@@ -195,10 +203,42 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 		return;
 	}
 
+	if (ntHdr.FileHeader.Machine == IMAGE_FILE_MACHINE_I386)
+	{ // 32bit
+
+	}
+	else if (ntHdr.FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64)
+	{ // 64bit
+		if (!ReadProcessMemory(hProcess, (LPCVOID)peHdrOffs, &ntHdr64, sizeof(ntHdr64), NULL))
+		{
+			DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+			if (dwRet != 0){
+				_ftprintf(stdout, TEXT("[!] Failed to read 64bit PE header- %s"), strErrMsg);
+			}
+			else
+			{
+				_ftprintf(stdout, TEXT("[!] Failed to read 64bit PE header - Error: %d\n"), GetLastError());
+			}
+
+			free(pFileMem);
+			free(pFileDisk);
+			return;
+		}
+		else {
+			fprintf(stdout, "[i] Read 64bit PE header %08x\n", ntHdr64.OptionalHeader.BaseOfCode);
+		}
+	}
+	else
+	{ // Unknown
+
+	}
+
 	//
 	// This is all related to finding and reading the base relocations
 	//
-	if (ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size > 0) {
+	if (ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size > 0 && ntHdr.FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
+		
+		RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
 		dataRelocation = (DWORD_PTR*)malloc(ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
 		if (dataRelocation == NULL){
 			free(pFileMem);
@@ -207,6 +247,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 		}
 		else {
 			DWORD_PTR dwBaseRelocAddress = pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+			RelocationAddress = dwBaseRelocAddress;
 			if (!ReadProcessMemory(hProcess,
 				(LPCVOID)dwBaseRelocAddress,
 				dataRelocation,
@@ -215,11 +256,11 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 			{
 				DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
 				if (dwRet != 0){
-					_ftprintf(stdout, TEXT("[!] Failed to read base relocations- %s"), strErrMsg);
+					_ftprintf(stdout, TEXT("[!] Failed to read base relocations - %s"), strErrMsg);
 				}
 				else
 				{
-					_ftprintf(stdout, TEXT("[!] Failed to read base relocations- Error: %d\n"), GetLastError());
+					_ftprintf(stdout, TEXT("[!] Failed to read base relocations - Error: %d\n"), GetLastError());
 				}
 				free(pFileMem);
 				free(pFileDisk);
@@ -228,7 +269,42 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 			}
 		}
 	}
-	else {
+	else if (ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size > 0 && ntHdr.FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) 
+	{
+
+		RelocationSize = ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
+		dataRelocation = (DWORD_PTR*)malloc(ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+		if (dataRelocation == NULL){
+			free(pFileMem);
+			free(pFileDisk);
+			return;
+		}
+		else {
+			DWORD_PTR dwBaseRelocAddress = pBaseAddress + ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+			RelocationAddress = dwBaseRelocAddress;
+			if (!ReadProcessMemory(hProcess,
+				(LPCVOID)dwBaseRelocAddress,
+				dataRelocation,
+				ntHdr64.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size,
+				NULL))
+			{
+				DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+				if (dwRet != 0){
+					_ftprintf(stdout, TEXT("[!] Failed to 64bit read base relocations - %s"), strErrMsg);
+				}
+				else
+				{
+					_ftprintf(stdout, TEXT("[!] Failed to 64bit read base relocations - Error: %d\n"), GetLastError());
+				}
+				free(pFileMem);
+				free(pFileDisk);
+				free(dataRelocation);
+				return;
+			}
+		}
+	}
+	else 
+	{
 		// TODO: Error message?
 		free(pFileMem);
 		free(pFileDisk);
@@ -291,10 +367,7 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 	// versus disk version
 	if (bFound == true){
 		_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p of %d bytes\n"), strDLLName, (pBaseAddress + pSection->VirtualAddress), pSection->SizeOfRawData);
-
-		RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
-		//PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, 0, false, false, false, true);
-		fprintf(stdout, "[i] Relocations at %p of %u bytes with %d relocations\n", (pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size, dwModuleRelocs);
+		_ftprintf(stdout, TEXT("[i] Relocations at %p of %u bytes with %d relocations\n"), RelocationAddress,RelocationSize, dwModuleRelocs);
 
 		// Read the process copy
 		if (!ReadProcessMemory(hProcess, (LPCVOID)(pBaseAddress + pSection->VirtualAddress), pFileMem, pSection->Misc.VirtualSize, NULL))
@@ -346,10 +419,10 @@ void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE
 				dwDiffs = 0;
 				for (DWORD_PTR dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
 					if (memcmp(pFileMemCmp, pFileDiskPtr, 1) != 0)  {
-						//if (PrintRelocations(dataRelocation, RelocationSize, (DWORD_PTR)pBaseAddress, (pSection->VirtualAddress + dwCount), false, false, false, false) == false){
+						if (PrintRelocations(dataRelocation, RelocationSize, (DWORD_PTR)pBaseAddress, (pSection->VirtualAddress + dwCount), false, false, false, false) == false){
 							dwDiffs++;
 							if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x (%08x) of %d: %02x versus %02x diff %02x\n", dwCount, (pSection->VirtualAddress + dwCount), pSection->Misc.VirtualSize, *pFileMemCmp, *pFileDiskPtr, (*pFileMemCmp - *pFileDiskPtr) & 0xff);
-						//}
+						}
 					}
 					pFileMemCmp++;
 					pFileDiskPtr++;
