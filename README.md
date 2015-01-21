@@ -11,7 +11,7 @@ Working on the whole for 32bit binaries... need to add support for 64bit...
 
 ###### Features
 This tool
-* either for specific or all 32bit Windows processes enumerates the modules (.exe's and .dll's)
+* either for specific or all 32bit OR 64bit Windows processes enumerates the modules (.exe's and .dll's)
 * find the .text (code) section in RAM
 * find the .text (code) section on disk
 * compares them taking into account base relocations
