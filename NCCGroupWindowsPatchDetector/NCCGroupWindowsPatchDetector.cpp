@@ -10,31 +10,39 @@ https://github.com/olliencc/WindowsPatchDetector
 Released under AGPL see LICENSE for more information
 */
 
+// Includes
 #include "stdafx.h"
 
-// Global 
-HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-bool bVerbose = false;
+// Globals
+HANDLE	hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+bool	bVerbose = false;
+TCHAR	strErrMsg[1024];
 
+// Manual imports
 _NtQueryInformationProcess __NtQueryInformationProcess = (_NtQueryInformationProcess)GetProcAddress(GetModuleHandle(_T("ntdll.dll")), "NtQueryInformationProcess");
+typedef BOOL(WINAPI *LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
+LPFN_ISWOW64PROCESS fnIsWow64Process = fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(GetModuleHandle(TEXT("kernel32")), "IsWow64Process");
 
-void CleanCursor(){
-	fprintf(stderr, "\b");
-	fflush(stderr);
-}
+// https://msdn.microsoft.com/en-us/library/windows/desktop/ms684139(v=vs.85).aspx
+BOOL IsWow64()
+{
+	BOOL bIsWow64 = FALSE;
 
-// http://stackoverflow.com/questions/199336/print-spinning-cursor-in-a-terminal-running-application-using-c
-void AdvanceCursor() {
-	static int pos = 0;
-	char cursor[4] = { '/', '-', '\\', '|' };
-	fprintf(stderr,"%c\b", cursor[pos]);
-	fflush(stderr);
-	pos = (pos + 1) % 4;
+	if (NULL != fnIsWow64Process)
+	{
+		if (!fnIsWow64Process(GetCurrentProcess(), &bIsWow64))
+		{
+			return false;
+		}
+	}
+	return bIsWow64;
 }
 
 //
+// Function	: PrintRelocations
+// Role		: Used for printing and checking if an address is in a relocation
 //
-bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, PVOID pBaseAddress, DWORD dwOffset, bool bPrint, bool bPrintNoMatch, bool bPrintMatch, bool bCursor){
+bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, DWORD_PTR pBaseAddress, DWORD dwOffset, bool bPrint, bool bPrintNoMatch, bool bPrintMatch){
 
 
 	DWORD dwRelocs = 0;
@@ -48,8 +56,8 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, PVOID pBaseAdd
 
 	ULONG Size = 0;
 	PIMAGE_BASE_RELOCATION pRelocation = (PIMAGE_BASE_RELOCATION)dataRelocation;
-	DWORD Addr2 = 0;
-	DWORD Addr3 = 0;
+	DWORD_PTR Addr2 = 0;
+	DWORD_PTR Addr3 = 0;
 	//fprintf(stdout, "[i] Total Size %d %08x\n", RelocationSize, RelocationSize);
 
 	while (RelocationSize > Size && pRelocation->SizeOfBlock)
@@ -71,16 +79,14 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, PVOID pBaseAdd
 
 				//DWORD Addr = (DWORD)((DWORD)pBaseAddress + pRelocation->VirtualAddress + (Rel[i] & 0x0FFF));
 				//(DWORD)(pRelocation->VirtualAddress +
-				Addr2 = ((DWORD)pRelocation->VirtualAddress + ( Rel[i] & 0x0FFF));
+				Addr2 = (pRelocation->VirtualAddress + ( Rel[i] & 0x0FFF));
 				Addr3 = Rel[i] & 0x0FFF;
 				if (dwOffset >= Addr2 && dwOffset <= (Addr2 + 4)) {
 					if(bPrintMatch) fprintf(stdout, "[i] Match 1\n");
-					if(bCursor)CleanCursor();
 					return true;
 				}
 				else if (dwOffset >= Addr3 && dwOffset <= (Addr3 + 4)) {
 					if (bPrintMatch) fprintf(stdout, "[i] Match 2\n");
-					if (bCursor)CleanCursor();
 					return true;
 				}
 				else if (bPrintNoMatch == true) fprintf(stdout, "[i] Nomatch %08x %08x, %08x\n", Addr2, Addr3, dwOffset);
@@ -95,9 +101,7 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, PVOID pBaseAdd
 		Size += pRelocation->SizeOfBlock;
 	}
 
-	if (bCursor)CleanCursor();
 	return false;
-	//return dwRelocs;
 }
 
 
@@ -109,7 +113,7 @@ bool PrintRelocations(VOID *dataRelocation, DWORD RelocationSize, PVOID pBaseAdd
 // Notes	: This function uses code from this 1996 article by the legend Matt Pietrek
 //            http://www.microsoft.com/msj/archive/S2058.aspx
 //
-void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFile, TCHAR *strDLLName)
+void AnalyzeModule(HANDLE hProcess, DWORD_PTR pBaseAddress, DWORD dwSize, HANDLE hFile, TCHAR *strDLLName)
 {
 	unsigned char *pFileMem = (unsigned char *)malloc(dwSize);
 	unsigned char *pFileMemCmp = pFileMem;
@@ -122,8 +126,8 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	memset(pFileMem, 0x00, dwSize);
 	memset(pFileDisk, 0x00, dwSize);
 
-	SIZE_T szReadMem = 0;
-	SIZE_T szReadDisk = 0;
+	DWORD szReadMem = 0;
+	DWORD szReadDisk = 0;
 	DWORD dwDiffs = 0;
 
 	if (pFileMem == NULL) {
@@ -141,7 +145,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	// Some reading in the different headers we need i.e. DOS then NT
 	//
 	IMAGE_DOS_HEADER imgDOSHdr;
-	if (!ReadProcessMemory(hProcess, pBaseAddress, &imgDOSHdr, sizeof(imgDOSHdr), &szReadMem))
+	if (!ReadProcessMemory(hProcess, (LPCVOID)pBaseAddress, &imgDOSHdr, sizeof(imgDOSHdr), (SIZE_T*)&szReadMem))
 	{
 		free(pFileMem);
 		free(pFileDisk);
@@ -149,11 +153,11 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	}
 
 	// fprintf(stdout, "[i] Offset of PE header %p\n", imgDOSHdr.e_lfanew);
-	DWORD peHdrOffs = (DWORD)pBaseAddress + imgDOSHdr.e_lfanew;
+	DWORD_PTR peHdrOffs = pBaseAddress + imgDOSHdr.e_lfanew;
 
 	IMAGE_NT_HEADERS ntHdr;
 
-	if (!ReadProcessMemory(hProcess, (PVOID)peHdrOffs, &ntHdr, sizeof(ntHdr), &szReadMem))
+	if (!ReadProcessMemory(hProcess, (LPCVOID)peHdrOffs, &ntHdr, sizeof(ntHdr), (SIZE_T*)&szReadMem))
 	{
 		free(pFileMem);
 		free(pFileDisk);
@@ -179,12 +183,12 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 			return;
 		}
 		else {
-			DWORD dwBaseRelocAddress = (DWORD)pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
+			DWORD_PTR dwBaseRelocAddress = pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress;
 			if (!ReadProcessMemory(hProcess,
 				(LPCVOID)dwBaseRelocAddress,
 				dataRelocation,
 				ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size,
-				&szReadMem))
+				(SIZE_T*)&szReadMem))
 			{
 				fprintf(stdout, "[!] Failed to read base relocations\n");
 				free(pFileMem);
@@ -198,10 +202,11 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	//
 	// This works out where the .text is we need in memory
 	//
-	PVOID sectionHdrOffs = (PVOID)(
-		peHdrOffs
-		+ FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader)
-		+ ntHdr.FileHeader.SizeOfOptionalHeader);
+	DWORD_PTR sectionHdrOffs = (
+								peHdrOffs
+								+ FIELD_OFFSET(IMAGE_NT_HEADERS, OptionalHeader)
+								+ ntHdr.FileHeader.SizeOfOptionalHeader
+								);
 
 	#define MAX_SECTIONS 128
 
@@ -212,17 +217,16 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	DWORD cSections = min(ntHdr.FileHeader.NumberOfSections, MAX_SECTIONS);
 
 	if (!ReadProcessMemory(hProcess,
-		sectionHdrOffs,
+		(LPCVOID)sectionHdrOffs,
 		&sections,
 		cSections * IMAGE_SIZEOF_SECTION_HEADER,
-		&szReadMem))
+		(SIZE_T*)&szReadMem))
 	{
 		free(pFileMem);
 		free(pFileDisk);
 		free(dataRelocation);
 		return;
 	}
-
 
 	// Loop through and the find the modules
 	// main code section (.text)
@@ -243,14 +247,15 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 	// OK we've found it now compare the RAM
 	// versus disk version
 	if (bFound == true){
-		_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p has %d relocations\n"), strDLLName, ((DWORD)pBaseAddress + pSection->VirtualAddress), pSection->NumberOfRelocations);
+		//_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p has %d relocations\n"), strDLLName, ((DWORD)pBaseAddress + pSection->VirtualAddress), pSection->NumberOfRelocations);
+		_ftprintf(stdout, TEXT("[i] Module %s .text section at virtual address %p of %d bytes\n"), strDLLName, ((DWORD)pBaseAddress + pSection->VirtualAddress), pSection->SizeOfRawData);
 
-		fprintf(stdout, "[i] Relocations at %p of %u bytes\n", ((DWORD)pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
+		fprintf(stdout, "[i] Relocations at %p of %u bytes\n", (pBaseAddress + ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].VirtualAddress), ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size);
 		RelocationSize = ntHdr.OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC].Size;
 		//PrintRelocations(dataRelocation, RelocationSize, pBaseAddress,0, true, false, false,false);
 
 		// Read the process copy
-		if (ReadProcessMemory(hProcess, (PVOID)((DWORD)pBaseAddress + pSection->VirtualAddress), pFileMem, pSection->Misc.VirtualSize, &szReadMem)){
+		if (ReadProcessMemory(hProcess, (LPCVOID)(pBaseAddress + pSection->VirtualAddress), pFileMem, pSection->Misc.VirtualSize, (SIZE_T*)&szReadMem)){
 			//fprintf(stdout, "[i] Read process memory copy - asked for %d got %d\n", pSection->Misc.VirtualSize, szReadMem);
 		}
 		else {
@@ -261,7 +266,14 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 			//fprintf(stdout, "[i] Read disk copy - asked for %d got %d\n", dwSize, szReadDisk);
 		}
 		else {
-			fprintf(stdout, "[!] Failed disk read with %d of %d bytes at %p\n", GetLastError(), pSection->Misc.VirtualSize, pSection->PointerToRawData);
+			DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+			if (dwRet != 0){
+				_ftprintf(stdout, TEXT("[!] Failed disk read with of %d bytes at %p - %s"), pSection->Misc.VirtualSize, pSection->PointerToRawData,strErrMsg);
+			}
+			else
+			{
+				_ftprintf(stdout, TEXT("[!] Failed disk read with of %d bytes at %p - Error: %d\n"), pSection->Misc.VirtualSize, pSection->PointerToRawData, GetLastError());
+			}
 		}
 
 
@@ -280,7 +292,7 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 				dwDiffs = 0;
 				for (DWORD dwCount = 0; dwCount < pSection->Misc.VirtualSize; dwCount++){
 					if (memcmp(pFileMemCmp, pFileDiskPtr, 1) != 0)  {
-						if (PrintRelocations(dataRelocation, RelocationSize, pBaseAddress, (pSection->VirtualAddress + dwCount),false,false,false,false) == false){
+						if (PrintRelocations(dataRelocation, RelocationSize, (DWORD_PTR)pBaseAddress, (pSection->VirtualAddress + dwCount), false, false, false) == false){
 							dwDiffs++;
 							if (bVerbose == true) fprintf(stdout, "[diff] Offset %08x (%08x) of %d: %02x versus %02x diff %02x\n", dwCount, (pSection->VirtualAddress + dwCount), pSection->Misc.VirtualSize, *pFileMemCmp, *pFileDiskPtr, (*pFileMemCmp - *pFileDiskPtr) & 0xff);
 						}
@@ -307,29 +319,35 @@ void AnalyzeModule(HANDLE hProcess, PVOID pBaseAddress, DWORD dwSize, HANDLE hFi
 // 
 void AnalyzePEB(HANDLE hProcess)
 {
-
-
 	PPEB_LDR_DATA pLDRE = NULL;
 	//LIST_ENTRY lstEntry;
-	VOID *pInfo = (VOID *)malloc(sizeof(PVOID) * 6);
+	DWORD_PTR *pInfo = (DWORD_PTR *)malloc(sizeof(DWORD_PTR) * 6);
 
 
 	NTSTATUS ntStatus = __NtQueryInformationProcess(hProcess,
 		ProcessBasicInformation,
 		pInfo, // 
-		sizeof(PVOID) * 6,
+		sizeof(DWORD_PTR) * 6,
 		NULL);
 
 	// TODO: Check here for return for above function
 
 	// Copy the PEB to our address space
-	PPEB pPEB = (PPEB)((PVOID*)pInfo)[1];
+	PPEB pPEB = (PPEB)((DWORD_PTR*)pInfo)[1];
 	PEB PEBCopy;
 	PEB_LDR_DATA PEBLDRData;
 
 	BOOL bRes = ReadProcessMemory(hProcess, pPEB, &PEBCopy, sizeof(PEB), NULL);
-	if (bRes == 0){
-		fprintf(stdout, "[!] +-- Error during ReadProcessMemory in AnalyzePEB - PEB - %d\n", GetLastError());
+	if (bRes == 0)
+	{
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] Error during ReadProcessMemory in AnalyzePEB - PEB- %s"), strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] Error during ReadProcessMemory in AnalyzePEB - PEB - Error: %d\n"), GetLastError());
+		}
 		return;
 	}
 	else
@@ -339,8 +357,16 @@ void AnalyzePEB(HANDLE hProcess)
 
 	// Copy the PEB LDR to our address space
 	bRes = ReadProcessMemory(hProcess, PEBCopy.Ldr, &PEBLDRData, sizeof(PEB_LDR_DATA), NULL);
-	if (bRes == 0){
-		fprintf(stdout, "[!] +-- Error during ReadProcessMemory in AnalyzePEB - PEBLDRData - %d\n", GetLastError());
+	if (bRes == 0)
+	{
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] Error during ReadProcessMemory in AnalyzePEB - PEBLDRData - %s"), strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] Error during ReadProcessMemory in AnalyzePEB - PEBLDRData - Error: %d\n"), GetLastError());
+		}
 		return;
 	}
 	else
@@ -357,31 +383,25 @@ void AnalyzePEB(HANDLE hProcess)
 		if (ReadProcessMemory(hProcess, entryBase, &ldrMod, sizeof(ldrMod), NULL))
 		{
 			TCHAR dllName[MAX_PATH] = { 0 };
-			//fprintf(stdout, "[i] Top of module list at %p\n", ldrMod.FullDllName);
 			if (ReadProcessMemory(hProcess, ldrMod.FullDllName.Buffer, &dllName, ldrMod.FullDllName.Length, NULL) && ldrMod.DllBase != NULL)
 			{
-				//_ftprintf(stdout, TEXT("[i] Module Fullname %s - DLL Base %p\n"), dllName,ldrMod.DllBase);
-				unsigned char *strFoo[4] = {0};
-				if (ReadProcessMemory(hProcess, ldrMod.DllBase, &strFoo, sizeof(strFoo), NULL))
-				{
-
-					//if (_tcsncicmp(dllName, TEXT("C:\\windows\\SYSTEM32\\"), _tcsclen(TEXT("C:\\Windows\\System32\\"))) == 0){
-					//	pMod = ldrMod.InMemoryOrderLinks.Flink;
-						//continue;
-					//}
-					HANDLE hFile = CreateFile(dllName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-
-					if (hFile == INVALID_HANDLE_VALUE){
-						fprintf(stdout, "[!] +-- Error during CreateFile in AnalyzePEB - %d\n", GetLastError());
-						return;
+				
+				HANDLE hFile = CreateFile(dllName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+				if (hFile == INVALID_HANDLE_VALUE){
+					DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+					if (dwRet != 0){
+						_ftprintf(stdout, TEXT("[!] Error during CreateFile in AnalyzePEB - %s"), strErrMsg);
 					}
-					else {
-						DWORD dwSize = GetFileSize(hFile, NULL);
-						AnalyzeModule(hProcess, ldrMod.DllBase, dwSize, hFile,dllName);
-						CloseHandle(hFile);
-						//break;
+					else
+					{
+						_ftprintf(stdout, TEXT("[!] Error during CreateFile in AnalyzePEB - Error: %d\n"), GetLastError());
 					}
-					
+					return;
+				}
+				else {
+					DWORD dwSize = GetFileSize(hFile, NULL);
+					AnalyzeModule(hProcess, (DWORD_PTR)ldrMod.DllBase, dwSize, hFile, dllName);
+					CloseHandle(hFile);
 				}
 			}
 			pMod = ldrMod.InMemoryOrderLinks.Flink;
@@ -393,6 +413,39 @@ void AnalyzePEB(HANDLE hProcess)
 
 
 //
+// Function	: PrintProcessInfo
+// Role		: Print a little about the process
+// Notes	: 
+// 
+void PrintProcessInfo(TCHAR *cProcess, DWORD dwPID){
+	// 
+	DWORD dwSessionID = 0;
+	ProcessIdToSessionId(dwPID, &dwSessionID);
+	PWTS_SESSION_INFO pSessionInfo;
+	DWORD dwSessionInfo = 0;
+	if (WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pSessionInfo, &dwSessionInfo) == 0){
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] WTSEnumerateSessions failed (%d) - %s"), dwPID, strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] WTSEnumerateSessions failed (%d) - Error: %d\n"), dwPID, GetLastError());
+		}
+		return;
+	}
+
+	DWORD dwCount = 0;
+	for (dwCount = 0; dwCount<dwSessionInfo; dwCount++)
+	{
+		if (pSessionInfo[dwCount].SessionId == dwSessionID) break;
+	}
+
+	// 
+	_ftprintf(stdout, TEXT("[i] %S [%s - PID: %d in session %d - window station %s]\n"), TEXT("+> Process"), cProcess, dwPID, dwSessionID, pSessionInfo[dwCount].pWinStationName);
+}
+
+//
 // Function	: AnalyzeProcess
 // Role		: Analyses a particular process ID
 // Notes	: 
@@ -402,76 +455,97 @@ void AnalyzeProcess(DWORD dwPID)
 	DWORD dwRet=0, dwMods=0;
 	HANDLE hProcess=NULL;
 	HMODULE hModule[9000];
-	TCHAR cProcess[MAX_PATH];
-	//TCHAR cModule[MAX_PATH];
-
+	TCHAR cProcess[MAX_PATH] = { 0 };
 	bool bFirstError = false;
 
-	hProcess = OpenProcess(MAXIMUM_ALLOWED, FALSE, dwPID);
-	if (hProcess == NULL)
+	PWTS_PROCESS_INFO pProcessInfo;
+	DWORD dwProcessCount = 0;
+
+	if (WTSEnumerateProcesses(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pProcessInfo, &dwProcessCount) == 0)
 	{
-		if (GetLastError() == 5){
-			bFirstError = true;
-			hProcess = OpenProcess(MAXIMUM_ALLOWED, FALSE, dwPID);
-
-			if (hProcess == NULL){
-
-				PWTS_PROCESS_INFO pProcessInfo;
-				DWORD dwProcessCount = 0;
-
-				if (WTSEnumerateProcesses(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pProcessInfo, &dwProcessCount) == 0){
-					fprintf(stderr, "[!] OpenProcess fallback failed (%d),%d\n", dwPID, GetLastError());
-					return;
-				}
-				else{
-					for (DWORD dwCount = 0; dwCount<dwProcessCount; dwCount++){
-						if (pProcessInfo[dwCount].ProcessId == dwPID){
-							_tcscpy_s(cProcess, MAX_PATH, pProcessInfo[dwCount].pProcessName);
-						}
-					}
-					WTSFreeMemory(pProcessInfo);
-				}
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] WTSEnumerateProcesses failed (%d) - %s"), dwPID, strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] WTSEnumerateProcesses failed (%d) - Error: %d\n"), dwPID, GetLastError());
+		}
+		return;
+	}
+	else
+	{
+		for (DWORD dwCount = 0; dwCount<dwProcessCount; dwCount++)
+		{
+			if (pProcessInfo[dwCount].ProcessId == dwPID)
+			{
+				_tcscpy_s(cProcess, MAX_PATH, pProcessInfo[dwCount].pProcessName);
+				PrintProcessInfo(cProcess, dwPID);
 			}
 		}
-		else { // Last error wasn't access denied 
-			fprintf(stderr, "[!] OpenProcess failed (%d),%d\n", dwPID, GetLastError());
-			return;
-		}
+		WTSFreeMemory(pProcessInfo);
 	}
-	else { // Process handle not NULL
 
+	// Open the process
+	hProcess = OpenProcess(MAXIMUM_ALLOWED, FALSE, dwPID);
+	if (hProcess == NULL || hProcess == INVALID_HANDLE_VALUE)
+	{ // Uh oh
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] OpenProcess failed for PID %d - %s"), dwPID, strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] OpenProcess failed (%d) - Error:\n"), dwPID, GetLastError());
+		}
+		return;
+	}
+	else 
+	{ // Process handle not NULL
 		if (EnumProcessModules(hProcess, hModule, 9000 * sizeof(HMODULE), &dwRet) == 0)
 		{
-			if (GetLastError() == 299){
-				fprintf(stderr, "[i] 64bit process and we're 32bit - sad panda! skipping PID %d\n", dwPID);
+			if (GetLastError() == 299 && IsWow64())
+			{
+				fprintf(stdout, "[i] 64bit process and we're 32bit - skipping PID %d!\n", dwPID);
 			}
-			else {
-				fprintf(stderr, "[!] EnumProcessModules(%d),%d\n", dwPID, GetLastError());
+			else 
+			{
+				DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+				if (dwRet != 0){
+					_ftprintf(stdout, TEXT("[!] EnumProcessModules() failed (%d) - %s"), dwPID, strErrMsg);
+				}
+				else
+				{
+					_ftprintf(stdout, TEXT("[!] EnumProcessModules() failed (%d) - Error: %d\n"), dwPID, GetLastError());
+				}
 			}
 			return;
 		}
 		dwMods = dwRet / sizeof(HMODULE);
-
-		GetModuleBaseName(hProcess, hModule[0], cProcess, MAX_PATH);
+		if (GetModuleBaseName(hProcess, hModule[0], cProcess, MAX_PATH) == 0){
+			DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+			if (dwRet != 0){
+				_ftprintf(stdout, TEXT("[!] GetModuleBaseName failed for PID %d - %s"), dwPID, strErrMsg);
+			}
+			else
+			{
+				_ftprintf(stdout, TEXT("[!] GetModuleBaseName failed (%d) - Error:\n"), dwPID, GetLastError());
+			}
+			return;
+		}
 	}
 
-
-	DWORD dwSessionID = 0;
-	ProcessIdToSessionId(dwPID, &dwSessionID);
-
-	PWTS_SESSION_INFO pSessionInfo;
-	DWORD dwSessionInfo = 0;
-	WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE, 0, 1, &pSessionInfo, &dwSessionInfo);
-	DWORD dwCount = 0;
-	for (dwCount = 0; dwCount<dwSessionInfo; dwCount++){
-		if (pSessionInfo[dwCount].SessionId == dwSessionID) break;
-	}
-
-	_ftprintf(stdout, TEXT("[i] %S [%s - PID: %d in session %d - window station %s]\n"), TEXT("+> Process"), cProcess, dwPID, dwSessionID, pSessionInfo[dwCount].pWinStationName);
 	
-	AnalyzePEB(hProcess);
+	if (hProcess != INVALID_HANDLE_VALUE){
+		// Main heavy lifting
+		AnalyzePEB(hProcess);
+		CloseHandle(hProcess);
+	}
+	else {
+		_ftprintf(stdout, TEXT("[!] AnalyzeProcess unknown error!\n"));
+	}
 
-	CloseHandle(hProcess);
+	
 }
 
 //
@@ -486,7 +560,14 @@ void EnumerateProcesses()
 
 	if (EnumProcesses(dwPIDArray, 4096 * sizeof(DWORD), &dwRet) == 0)
 	{
-		fprintf(stderr, "[!]  EnumerateProcesses(),%d\n", GetLastError());
+		DWORD dwRet = FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, 0, GetLastError(), 0, strErrMsg, 1023, NULL);
+		if (dwRet != 0){
+			_ftprintf(stdout, TEXT("[!] EnumProcesses() failed - %s"), strErrMsg);
+		}
+		else
+		{
+			_ftprintf(stdout, TEXT("[!] EnumProcesses() - Error: %d\n"), GetLastError());
+		}
 		return;
 	}
 
@@ -545,7 +626,7 @@ int _tmain(int argc, _TCHAR* argv[])
 			bHelp = true;
 			break;
 		default:
-			fwprintf(stderr, L"[!] No handler - %c\n", chOpt);
+			fwprintf(stdout, L"[!] No handler for the paramater- %c\n", chOpt);
 			break;
 	}
 
