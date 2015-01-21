@@ -7,7 +7,7 @@ Experimental: Windows .text section compare - disk versus memory
 After reading about the Skeleton Key malware (http://www.secureworks.com/cyber-threat-intelligence/threats/skeleton-key-malware-analysis/) develop a small tool which would compare the .text section of .exe and .dll files on disk with their RAM equivilent to detect patches.
 
 ###### Result
-Working on the whole for 32bit binaries... need to add support for 64bit...
+Working on the whole for 32bit and 64bit binaries... 
 
 ###### Features
 This tool
